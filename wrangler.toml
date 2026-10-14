@@ -9,6 +9,20 @@ main = "JokerMusic_Worker.py"
 compatibility_date = "2026-10-10"
 compatibility_flags = ["python_workers"]
 
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+invocation_logs = true
+persist = true
+
+[observability.traces]
+enabled = true
+head_sampling_rate = 1
+persist = true
+
+[observability.issue_detection]
+enabled = true
+
 # -------------------------------------------------------------------------------------------------------------
 # 静态资源目录（Workers Assets）
 # Workers Assets 会自动通过 env.ASSETS.fetch() 提供这些文件
