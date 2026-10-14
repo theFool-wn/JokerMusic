@@ -16,8 +16,8 @@ import time
 import base64
 from urllib.parse import unquote, parse_qs
 
-from js import Response, URL, console, Request, Uint8Array, crypto
-from workers import WorkerEntrypoint
+from js import URL, console, Request, Uint8Array, crypto
+from workers import WorkerEntrypoint, Response
 
 
 # =============================================================================================================
@@ -173,7 +173,7 @@ def get_token_from_cookie(request, env) -> str:
 
 def json_response(data, status=200):
     """统一 JSON 响应"""
-    return Response.new(
+    return Response(
         json.dumps(data, ensure_ascii=False),
         status=status,
         headers={"Content-Type": "application/json; charset=utf-8"},
@@ -182,7 +182,7 @@ def json_response(data, status=200):
 
 def redirect_response(location):
     """302 重定向"""
-    return Response.new("", status=302, headers={"Location": location})
+    return Response("", status=302, headers={"Location": location})
 
 
 def make_session_cookie(token: str, env) -> str:
@@ -240,7 +240,7 @@ async def render_login_page(env, error: str = ""):
     error_html = f'<p class="login-error">{error}</p>' if error else ""
     html = html.replace("<!--ERROR_HTML-->", error_html)
 
-    return Response.new(
+    return Response(
         html,
         headers={"Content-Type": "text/html; charset=utf-8"},
     )
@@ -486,13 +486,13 @@ async def handle_api_stream(request, env, filename: str):
     try:
         filename = safe_filename(filename)
     except ValueError:
-        return Response.new("非法文件名", status=400)
+        return Response("非法文件名", status=400)
 
     key = env.MUSIC_PREFIX + filename
 
     obj_head = await env.JokerMusicLibrary.head(key)
     if obj_head is None:
-        return Response.new("音频文件不存在", status=404)
+        return Response("音频文件不存在", status=404)
 
     file_size = obj_head.size
     mime_type = "audio/mpeg"
@@ -515,10 +515,10 @@ async def handle_api_stream(request, env, filename: str):
             if end_str:
                 end = int(end_str)
             if start >= file_size:
-                return Response.new(status=416)
+                return Response(status=416)
             end = min(end, file_size - 1)
             if start > end:
-                return Response.new(status=416)
+                return Response(status=416)
 
     content_length = end - start + 1
 
@@ -528,7 +528,7 @@ async def handle_api_stream(request, env, filename: str):
         obj = await env.JokerMusicLibrary.get(key)
 
     if obj is None:
-        return Response.new("音频文件不存在", status=404)
+        return Response("音频文件不存在", status=404)
 
     headers = {
         "Content-Type": mime_type,
@@ -539,9 +539,9 @@ async def handle_api_stream(request, env, filename: str):
 
     if has_range:
         headers["Content-Range"] = f"bytes {start}-{end}/{file_size}"
-        return Response.new(obj.body, status=206, headers=headers)
+        return Response(obj.body, status=206, headers=headers)
     else:
-        return Response.new(obj.body, status=200, headers=headers)
+        return Response(obj.body, status=200, headers=headers)
 
 
 def not_found_response(path: str):
@@ -585,7 +585,7 @@ def not_found_response(path: str):
     <a href="/">返回主页</a>
 </body>
 </html>"""
-    return Response.new(html, status=404, headers={"Content-Type": "text/html; charset=utf-8"})
+    return Response(html, status=404, headers={"Content-Type": "text/html; charset=utf-8"})
 
 
 class Default(WorkerEntrypoint):
@@ -635,7 +635,7 @@ class Default(WorkerEntrypoint):
             return resp
 
         if path == "/robots.txt":
-            return Response.new(
+            return Response(
                 "User-agent: *\nDisallow: /\n",
                 headers={"Content-Type": "text/plain"},
             )
