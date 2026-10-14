@@ -7,7 +7,7 @@
 name = "joker-music"
 main = "JokerMusic_Worker.py"
 compatibility_date = "2026-10-10"
-compatibility_flags = ["python_workers"]
+compatibility_flags = ["python_workers", "disable_python_external_sdk"]
 
 # -------------------------------------------------------------------------------------------------------------
 # 静态资源目录（Workers Assets）
