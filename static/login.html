@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;charset=utf-8;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiIgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiPgogIDxkZWZzPjxsaW5lYXJHcmFkaWVudCBpZD0iZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iIzZjNWNlNyIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI2EyOWJmZSIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPgogIDxjaXJjbGUgY3g9IjE2IiBjeT0iMTYiIHI9IjE1IiBmaWxsPSIjMGYwZjFhIiBzdHJva2U9InVybCgjZykiIHN0cm9rZS13aWR0aD0iMS41Ii8+CiAgPGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iOSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNmM1Y2U3IiBzdHJva2Utd2lkdGg9IjAuOCIgb3BhY2l0eT0iMC40Ii8+CiAgPGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iNSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjNmM1Y2U3IiBzdHJva2Utd2lkdGg9IjAuNiIgb3BhY2l0eT0iMC4zIi8+CiAgPGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMiIgZmlsbD0idXJsKCNnKSIgb3BhY2l0eT0iMC4zIi8+CiAgPHBhdGggZmlsbD0idXJsKCNnKSIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoOC41LCA4LjUpIHNjYWxlKDAuNSkiIGQ9Ik0gMjEuNTYyNSAwLjE3MTg3NSBMIDEwLjQ1MzEyNSAzLjU3MDMxMyBDIDkuMTA1NDY5IDMuOTUzMTI1IDguMDE1NjI1IDUuMzU1NDY5IDguMDE1NjI1IDYuNzAzMTI1IEwgOC4wMTU2MjUgMTguMjYxNzE5IEMgOC4wMTU2MjUgMTguMjYxNzE5IDguMDE1NjI1IDE4LjQxNzk2OSA4LjAxNTYyNSAxOC40MjE4NzUgQyA4LjAxNTYyNSAxOC40MjE4NzUgNy4yMTA5MzggMTcuODc4OTA2IDUuNDE3OTY5IDE4LjEzMjgxMyBDIDIuNzg1MTU2IDE4LjUwNzgxMyAwLjY0ODQzOCAyMC41MjczNDQgMC42NDg0MzggMjIuNjQ4NDM4IEMgMC42NDg0MzggMjQuNzY5NTMxIDIuNzg1MTU2IDI2LjA2NjQwNiA1LjQxNzk2OSAyNS42OTE0MDYgQyA4LjA1NDY4OCAyNS4zMjAzMTMgOS45ODQzNzUgMjMuMzYzMjgxIDkuOTg0Mzc1IDIxLjI0MjE4OCBDIDkuOTg0Mzc1IDIxLjI0MjE4OCA5Ljk4NDM3NSAxMi4xNzU3ODEgOS45ODQzNzUgOC4yMzQzNzUgQyA5Ljk4NDM3NSA3LjI5Njg3NSAxMS4xMTMyODEgNi44OTA2MjUgMTEuMTEzMjgxIDYuODkwNjI1IEwgMjAuOTM3NSAzLjgxMjUgQyAyMC45Mzc1IDMuODEyNSAyMi4wMjM0MzggMy40NDkyMTkgMjIuMDIzNDM4IDQuNDUzMTI1IEMgMjIuMDIzNDM4IDguNDYwOTM4IDIyLjAyMzQzOCAxNS40ODQzNzUgMjIuMDIzNDM4IDE1LjQ4NDM3NSBDIDIyLjAyMzQzOCAxNS40ODQzNzUgMjIuMDIzNDM4IDE1LjQ4ODI4MSAyMi4wMjM0MzggMTUuNDkyMTg4IEMgMjIuMDIzNDM4IDE1LjQ5MjE4OCAyMS4wMjM0MzggMTQuOTE0MDYzIDE5LjIzMDQ2OSAxNS4xMzI4MTMgQyAxNi41OTc2NTYgMTUuNDUzMTI1IDE0LjQ2MDkzOCAxNy40Mjk2ODggMTQuNDYwOTM4IDE5LjU1MDc4MSBDIDE0LjQ2MDkzOCAyMS42NzE4NzUgMTYuNTk3NjU2IDIzLjAxMTcxOSAxOS4yMzA0NjkgMjIuNjkxNDA2IEMgMjEuODYzMjgxIDIyLjM3NSAyNCAyMC4zOTQ1MzEgMjQgMTguMjczNDM4IEwgMjQgMS45MTAxNTYgQyAyNCAwLjU2NjQwNiAyMi45MDYyNSAtMC4yMTQ4NDQgMjEuNTYyNSAwLjE3MTg3NSBaIi8+Cjwvc3ZnPg==">
+        <title>登录 - 薛之谦 · 私人音乐空间</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+                background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: #eee;
+            }
+
+            .login-box {
+                background: rgba(255, 255, 255, 0.08);
+                backdrop-filter: blur(12px);
+                border: 1px solid rgba(255, 255, 255, 0.15);
+                border-radius: 16px;
+                padding: 40px 36px;
+                width: 90%;
+                max-width: 380px;
+                text-align: center;
+            }
+
+            .login-box h1 {
+                font-size: 22px;
+                margin-bottom: 6px;
+                font-weight: 600;
+            }
+
+            .login-box .subtitle {
+                font-size: 13px;
+                color: #aaa;
+                margin-bottom: 14px;
+                margin-top: 14px;
+            }
+
+            .login-box input[type="password"] {
+                width: 100%;
+                padding: 12px 44px 12px 14px;
+                border-radius: 8px;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                background: rgba(0, 0, 0, 0.25);
+                color: #fff;
+                font-size: 15px;
+                outline: none;
+                margin-bottom: 16px;
+                margin-top: 16px;
+            }
+
+            .login-box input[type="text"] {
+                width: 100%;
+                padding: 12px 44px 12px 14px;
+                border-radius: 8px;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                background: rgba(0, 0, 0, 0.25);
+                color: #fff;
+                font-size: 15px;
+                outline: none;
+                margin-bottom: 16px;
+                margin-top: 16px;
+            }
+
+            .login-box input[type="password"]:focus {
+                border-color: #4a9eff;
+            }
+
+            .login-box input[type="text"]:focus {
+                border-color: #4a9eff;
+            }
+
+            .login-box input:-webkit-autofill,
+            .login-box input:-webkit-autofill:hover,
+            .login-box input:-webkit-autofill:focus {
+                -webkit-text-fill-color: #fff;
+                background-color: transparent !important;   /* 新增：清掉浏览器白色底 */
+                caret-color: #fff;
+                transition: background-color 5000s ease-in-out 0s;
+            }
+
+            /* 隐藏浏览器原生的密码显示图标，统一用自定义按钮 */
+            .login-box input[type="password"]::-ms-reveal,
+            .login-box input[type="password"]::-ms-clear {
+                display: none !important;
+            }
+
+            .password-wrap {
+                position: relative;
+            }
+
+            .login-box .toggle-pwd {
+                position: absolute;
+                right: 10px;
+                top: 50%;
+                transform: translateY(-50%);
+                background: none;
+                border: none;
+                color: #888;
+                cursor: pointer;
+                padding: 4px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: auto;
+                margin-bottom: 0;
+                border-radius: 4px;
+            }
+
+            .login-box .toggle-pwd:hover {
+                color: #fff;
+                background: rgba(255, 255, 255, 0.1);
+            }
+
+            .login-box button {
+                width: 100%;
+                padding: 12px;
+                border: none;
+                border-radius: 8px;
+                background: #4a9eff;
+                color: #fff;
+                font-size: 15px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: background 0.2s;
+            }
+
+            .login-box button:hover {
+                background: #3a8eef;
+            }
+
+            .login-error {
+                color: #ff6b6b;
+                font-size: 13px;
+            }
+
+            .footer-note {
+                margin-top: 24px;
+                font-size: 11px;
+                color: #777;
+                line-height: 1.6;
+            }
+
+            @media (max-width: 640px) {
+                .login-box .toggle-pwd:hover {
+                    color: #888;
+                    background: transparent;
+                }
+
+                .login-box .toggle-pwd:active {
+                    color: #fff;
+                    background: rgba(255, 255, 255, 0.1);
+                }
+            }
+        </style>
+    </head>
+
+    <body>
+        <div class="login-box">
+            <h1>薛之谦 · 私人音乐空间</h1>
+            <p class="subtitle">请输入访问密码</p>
+            <form method="POST">
+                <!--ERROR_HTML-->
+                <div class="password-wrap">
+                    <input type="password" name="password" id="passwordInput" placeholder="访问密码" autofocus required>
+                    <button type="button" class="toggle-pwd" id="togglePwd" aria-label="显示密码">
+                        <svg id="eyeOpen" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                            <circle cx="12" cy="12" r="3" />
+                        </svg>
+                        <svg id="eyeClosed" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+                            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                            <line x1="1" y1="1" x2="23" y2="23" />
+                        </svg>
+                    </button>
+                </div>
+                <button type="submit">登 录</button>
+            </form>
+            <p class="footer-note">
+                本项目为个人学习练习，非盈利，不提供资源下载<br>
+                歌曲歌词版权归原著作权人所有
+            </p>
+        </div>
+        <script>
+            const pwdInput = document.getElementById('passwordInput');
+            const toggleBtn = document.getElementById('togglePwd');
+            const eyeOpen = document.getElementById('eyeOpen');
+            const eyeClosed = document.getElementById('eyeClosed');
+            toggleBtn.addEventListener('click', () => {
+                const isPwd = pwdInput.type === 'password';
+                pwdInput.type = isPwd ? 'text' : 'password';
+                eyeOpen.style.display = isPwd ? 'none' : 'block';
+                eyeClosed.style.display = isPwd ? 'block' : 'none';
+                toggleBtn.setAttribute('aria-label', isPwd ? '隐藏密码' : '显示密码');
+                pwdInput.focus();
+            });
+        </script>
+    </body>
+
+</html>
