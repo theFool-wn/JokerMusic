@@ -9,10 +9,6 @@ main = "JokerMusic_Worker.py"
 compatibility_date = "2026-10-10"
 compatibility_flags = ["python_workers"]
 
-# Python Worker 第三方包声明（mutagen 读 ID3, pypinyin 中文拼音排序）
-[pyodide]
-packages = ["mutagen", "pypinyin"]
-
 # -------------------------------------------------------------------------------------------------------------
 # 静态资源目录（Workers Assets）
 # Workers Assets 会自动通过 env.ASSETS.fetch() 提供这些文件
