@@ -16,9 +16,31 @@ import time
 import base64
 from urllib.parse import unquote, parse_qs
 
-from js import URL, console, Request, Uint8Array, crypto
-from workers import WorkerEntrypoint, Response
+from js import Response, URL, console, Request, Uint8Array, crypto
+from workers import WorkerEntrypoint
+from pyodide.ffi import to_js, JsObject
 
+
+
+def _resp(body, *args, **kwargs):
+    """
+    构造 JS Response，使用 to_js 深度转换 Python dict → JS object
+    避免 Pyodide 浅拷贝导致嵌套 headers dict 类型错误 (JsvFunction_Construct)
+    兼容两种调用: _resp(body, {"status": 200, "headers": {...}})
+                 _resp(body, status=200, headers={...})
+    """
+    if args and isinstance(args[0], dict):
+        opts_in = args[0]
+        status  = opts_in.get("status", 200)
+        headers = opts_in.get("headers")
+    else:
+        status  = kwargs.get("status", 200)
+        headers = kwargs.get("headers")
+
+    opts = {"status": status}
+    if headers:
+        opts["headers"] = headers
+    return Response.new(body, to_js(opts, dict_converter=JsObject))
 
 # =============================================================================================================
 # 第三方包安装
@@ -173,16 +195,15 @@ def get_token_from_cookie(request, env) -> str:
 
 def json_response(data, status=200):
     """统一 JSON 响应"""
-    return Response(
+    return _resp(
         json.dumps(data, ensure_ascii=False),
-        status=status,
-        headers={"Content-Type": "application/json; charset=utf-8"},
+        {"status": status, "headers": {"Content-Type": "application/json; charset=utf-8"}},
     )
 
 
 def redirect_response(location):
     """302 重定向"""
-    return Response("", status=302, headers={"Location": location})
+    return _resp("", {"status": 302, "headers": {"Location": location}})
 
 
 def make_session_cookie(token: str, env) -> str:
@@ -240,9 +261,9 @@ async def render_login_page(env, error: str = ""):
     error_html = f'<p class="login-error">{error}</p>' if error else ""
     html = html.replace("<!--ERROR_HTML-->", error_html)
 
-    return Response(
+    return _resp(
         html,
-        headers={"Content-Type": "text/html; charset=utf-8"},
+        {"headers": {"Content-Type": "text/html; charset=utf-8"}},
     )
 
 
@@ -486,13 +507,13 @@ async def handle_api_stream(request, env, filename: str):
     try:
         filename = safe_filename(filename)
     except ValueError:
-        return Response("非法文件名", status=400)
+        return _resp("非法文件名", {"status": 400})
 
     key = env.MUSIC_PREFIX + filename
 
     obj_head = await env.JokerMusicLibrary.head(key)
     if obj_head is None:
-        return Response("音频文件不存在", status=404)
+        return _resp("音频文件不存在", {"status": 404})
 
     file_size = obj_head.size
     mime_type = "audio/mpeg"
@@ -515,10 +536,10 @@ async def handle_api_stream(request, env, filename: str):
             if end_str:
                 end = int(end_str)
             if start >= file_size:
-                return Response(status=416)
+                return _resp("", {"status": 416})
             end = min(end, file_size - 1)
             if start > end:
-                return Response(status=416)
+                return _resp("", {"status": 416})
 
     content_length = end - start + 1
 
@@ -528,7 +549,7 @@ async def handle_api_stream(request, env, filename: str):
         obj = await env.JokerMusicLibrary.get(key)
 
     if obj is None:
-        return Response("音频文件不存在", status=404)
+        return _resp("音频文件不存在", {"status": 404})
 
     headers = {
         "Content-Type": mime_type,
@@ -539,9 +560,9 @@ async def handle_api_stream(request, env, filename: str):
 
     if has_range:
         headers["Content-Range"] = f"bytes {start}-{end}/{file_size}"
-        return Response(obj.body, status=206, headers=headers)
+        return _resp(obj.body, {"status": 206, "headers": headers})
     else:
-        return Response(obj.body, status=200, headers=headers)
+        return _resp(obj.body, {"status": 200, "headers": headers})
 
 
 def not_found_response(path: str):
@@ -585,7 +606,7 @@ def not_found_response(path: str):
     <a href="/">返回主页</a>
 </body>
 </html>"""
-    return Response(html, status=404, headers={"Content-Type": "text/html; charset=utf-8"})
+    return _resp(html, {"status": 404, "headers": {"Content-Type": "text/html; charset=utf-8"}})
 
 
 class Default(WorkerEntrypoint):
@@ -635,9 +656,9 @@ class Default(WorkerEntrypoint):
             return resp
 
         if path == "/robots.txt":
-            return Response(
+            return _resp(
                 "User-agent: *\nDisallow: /\n",
-                headers={"Content-Type": "text/plain"},
+                {"headers": {"Content-Type": "text/plain"}},
             )
 
         if path == "/sw.js":
