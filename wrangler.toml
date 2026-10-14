@@ -7,6 +7,7 @@
 name = "joker-music"
 main = "JokerMusic_Worker.py"
 compatibility_date = "2026-10-10"
+compatibility_flags = ["python_workers"]
 
 # Python Worker 第三方包声明（mutagen 读 ID3, pypinyin 中文拼音排序）
 [pyodide]
