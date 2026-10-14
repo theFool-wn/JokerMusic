@@ -234,8 +234,7 @@ async def render_login_page(env, error: str = ""):
     登录页渲染
     从 Workers Assets 读取 login.html, 替换错误提示占位符
     """
-    req = Request.new("/login.html", {"method": "GET"})
-    resp = await env.ASSETS.fetch(req)
+    resp = await env.ASSETS.fetch("/login.html")
     html = await resp.text()
 
     error_html = f'<p class="login-error">{error}</p>' if error else ""
@@ -649,10 +648,7 @@ class Default(WorkerEntrypoint):
 
         if path.startswith("/static/"):
             asset_path = path[len("/static"):]
-            new_url = URL.new(request.url)
-            new_url.pathname = asset_path
-            new_req = Request.new(new_url, {"method": "GET", "headers": request.headers})
-            return await env.ASSETS.fetch(new_req)
+            return await env.ASSETS.fetch(asset_path)
 
         # -------------------------------------------------------------------------
         # 以下路由需要登录验证
@@ -662,8 +658,7 @@ class Default(WorkerEntrypoint):
         if path == "/":
             if not logged_in:
                 return redirect_response("/login")
-            idx_req = Request.new("/index.html", {"method": "GET"})
-            return await env.ASSETS.fetch(idx_req)
+            return await env.ASSETS.fetch("/index.html")
 
         if path == "/api/songs":
             if not logged_in:
