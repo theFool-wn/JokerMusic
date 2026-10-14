@@ -4,7 +4,7 @@
 # 本地开发: npx wrangler dev
 # =============================================================================================================
 
-name = "JokerMusic"
+name = "joker-music"
 main = "JokerMusic_Worker.py"
 compatibility_date = "2026-10-10"
 
