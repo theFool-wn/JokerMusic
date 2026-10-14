@@ -1,0 +1,14 @@
+[project]
+name = "joker-music"
+version = "0.1.0"
+description = "A Private Music Player about Joker Xue"
+requires-python = ">=3.13"
+dependencies = [
+    "mutagen",
+    "pypinyin",
+]
+
+[dependency-groups]
+dev = [
+    "workers-py",
+]

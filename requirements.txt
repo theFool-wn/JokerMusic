@@ -1,7 +1,0 @@
-# Python Worker 第三方依赖
-# 这些包已在 wrangler.toml 的 [pyodide] packages 中声明
-# 本文件作为备选/参考，如果 wrangler 不自动读取 pyodide packages，
-# index.py 中的 ensure_packages() 会用 micropip 动态安装以下包
-
-mutagen>=1.47.0
-pypinyin>=0.50.0

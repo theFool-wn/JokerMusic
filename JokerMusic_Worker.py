@@ -5,6 +5,7 @@
 # @ Version Information: Created by WangNan, 2026/9/5 - 2026/9/9
 #                        Revised by WangNan, 2026/10/11, adapted for Cloudflare Python Worker
 #                                                        added JWT cookie
+#                        Revised by WangNan, 2026/10/15, fix deployment error
 # =============================================================================================================
 
 
@@ -16,6 +17,7 @@ import base64
 from urllib.parse import unquote, parse_qs
 
 from js import Response, URL, console, Request, Uint8Array, crypto
+from workers import WorkerEntrypoint
 
 
 # =============================================================================================================
@@ -24,16 +26,22 @@ from js import Response, URL, console, Request, Uint8Array, crypto
 _PACKAGES_READY = False
 
 async def ensure_packages():
-    """首次请求时安装"""
+    """确认依赖可用"""
     global _PACKAGES_READY
     if _PACKAGES_READY:
         return
         
-    import micropip
-    await micropip.install(["mutagen", "pypinyin"])
+    try:
+        import mutagen
+        import pypinyin
+    except ImportError:
+        try:
+            import micropip
+            await micropip.install(["mutagen", "pypinyin"])
+            console.log("[Joker's Music] mutagen/pypinyin installed via micropip")
+        except Exception as e:
+            console.log(f"[Joker's Music] package import failed: {e}")
     _PACKAGES_READY = True
-    console.log("[Joker's Music] mutagen installed")
-    console.log("[Joker's Music] pypinyin installed")
 
 
 # =============================================================================================================
@@ -581,15 +589,15 @@ def not_found_response(path: str):
     return Response.new(html, status=404, headers={"Content-Type": "text/html; charset=utf-8"})
 
 
-async def on_fetch(request, env):
+class Default(WorkerEntrypoint):
     """
-    Cloudflare Python Worker 固定入口
+    Cloudflare Python Worker 入口类
 
     路由表:
         公开 (无需登录) :
             GET  /login              → 登录页
-            POST /login              → 登录提交 (验证密码 → 签发 JWT) 
-            GET  /logout             → 登出 (清除 Cookie) 
+            POST /login              → 登录提交 (验证密码 → 签发 JWT)
+            GET  /logout             → 登出 (清除 Cookie)
             GET  /robots.txt         → 爬虫协议
             GET  /sw.js              → Service Worker
             GET  /manifest.json      → PWA 清单
@@ -602,85 +610,88 @@ async def on_fetch(request, env):
             GET  /api/lyric/<file>   → 歌词
             GET  /api/stream/<file>  → 音频流
     """
-    await ensure_packages()
+    
+    async def fetch(self, request):
+        env = self.env
+        await ensure_packages()
 
-    url    = URL.new(request.url)
-    path   = url.pathname
-    method = request.method
+        url    = URL.new(request.url)
+        path   = url.pathname
+        method = request.method
 
-    # -------------------------------------------------------------------------
-    # 公开路由
-    # -------------------------------------------------------------------------
+        # -------------------------------------------------------------------------
+        # 公开路由
+        # -------------------------------------------------------------------------
 
-    if path == "/login":
-        if method == "POST":
-            return await handle_login_post(request, env)
-        if await is_logged_in(request, env):
-            return redirect_response("/")
-        return await render_login_page(env)
+        if path == "/login":
+            if method == "POST":
+                return await handle_login_post(request, env)
+            if await is_logged_in(request, env):
+                return redirect_response("/")
+            return await render_login_page(env)
 
-    if path == "/logout":
-        resp = redirect_response("/login")
-        resp.headers.set("Set-Cookie", clear_session_cookie(env))
-        return resp
+        if path == "/logout":
+            resp = redirect_response("/login")
+            resp.headers.set("Set-Cookie", clear_session_cookie(env))
+            return resp
 
-    if path == "/robots.txt":
-        return Response.new(
-            "User-agent: *\nDisallow: /\n",
-            headers={"Content-Type": "text/plain"},
-        )
+        if path == "/robots.txt":
+            return Response.new(
+                "User-agent: *\nDisallow: /\n",
+                headers={"Content-Type": "text/plain"},
+            )
 
-    if path == "/sw.js":
-        return await env.ASSETS.fetch(request)
+        if path == "/sw.js":
+            return await env.ASSETS.fetch(request)
 
-    if path == "/manifest.json":
-        return await env.ASSETS.fetch(request)
+        if path == "/manifest.json":
+            return await env.ASSETS.fetch(request)
 
-    if path.startswith("/static/"):
-        asset_path = path[len("/static"):]
-        new_url = URL.new(request.url)
-        new_url.pathname = asset_path
-        new_req = Request.new(new_url, {"method": "GET", "headers": request.headers})
-        return await env.ASSETS.fetch(new_req)
+        if path.startswith("/static/"):
+            asset_path = path[len("/static"):]
+            new_url = URL.new(request.url)
+            new_url.pathname = asset_path
+            new_req = Request.new(new_url, {"method": "GET", "headers": request.headers})
+            return await env.ASSETS.fetch(new_req)
 
-    # -------------------------------------------------------------------------
-    # 以下路由需要登录验证
-    # -------------------------------------------------------------------------
-    logged_in = await is_logged_in(request, env)
+        # -------------------------------------------------------------------------
+        # 以下路由需要登录验证
+        # -------------------------------------------------------------------------
+        logged_in = await is_logged_in(request, env)
 
-    if path == "/":
-        if not logged_in:
-            return redirect_response("/login")
-        idx_req = Request.new("/index.html", {"method": "GET"})
-        return await env.ASSETS.fetch(idx_req)
+        if path == "/":
+            if not logged_in:
+                return redirect_response("/login")
+            idx_req = Request.new("/index.html", {"method": "GET"})
+            return await env.ASSETS.fetch(idx_req)
 
-    if path == "/api/songs":
-        if not logged_in:
-            return json_response({"error": "未登录"}, 401)
-        return await handle_api_songs(request, env)
+        if path == "/api/songs":
+            if not logged_in:
+                return json_response({"error": "未登录"}, 401)
+            return await handle_api_songs(request, env)
 
-    if path == "/api/reload" and method == "POST":
-        if not logged_in:
-            return json_response({"error": "未登录"}, 401)
-        return await handle_api_reload(request, env)
+        if path == "/api/reload" and method == "POST":
+            if not logged_in:
+                return json_response({"error": "未登录"}, 401)
+            return await handle_api_reload(request, env)
 
-    if path.startswith("/api/lyric/"):
-        if not logged_in:
-            return json_response({"error": "未登录"}, 401)
-        filename = path[len("/api/lyric/"):]
-        return await handle_api_lyric(request, env, filename)
+        if path.startswith("/api/lyric/"):
+            if not logged_in:
+                return json_response({"error": "未登录"}, 401)
+            filename = path[len("/api/lyric/"):]
+            return await handle_api_lyric(request, env, filename)
 
-    if path.startswith("/api/stream/"):
-        if not logged_in:
-            return json_response({"error": "未登录"}, 401)
-        filename = path[len("/api/stream/"):]
-        return await handle_api_stream(request, env, filename)
+        if path.startswith("/api/stream/"):
+            if not logged_in:
+                return json_response({"error": "未登录"}, 401)
+            filename = path[len("/api/stream/"):]
+            return await handle_api_stream(request, env, filename)
 
-    # -------------------------------------------------------------------------
-    # 404
-    # -------------------------------------------------------------------------
-    asset_resp = await env.ASSETS.fetch(request)
-    if asset_resp.status != 404:
-        return asset_resp
+        # -------------------------------------------------------------------------
+        # 404
+        # -------------------------------------------------------------------------
+        asset_resp = await env.ASSETS.fetch(request)
+        if asset_resp.status != 404:
+            return asset_resp
 
-    return not_found_response(path)
+        return not_found_response(path)
