@@ -182,9 +182,12 @@ def json_response(data, status=200):
     )
 
 
-def redirect_response(location):
+def redirect_response(location, cookie=None):
     """302 重定向"""
-    return Response("", status=302, headers={"Location": location, "Cache-Control": "no-store"})
+    headers = {"Location": location, "Cache-Control": "no-store"}
+    if cookie is not None:
+        headers["Set-Cookie"] = cookie
+    return Response("", status=302, headers=headers)
 
 
 def make_session_cookie(token: str, env) -> str:
@@ -431,9 +434,7 @@ async def handle_login_post(request, env):
 
     if password == site_password:
         token = await create_token(env)
-        resp = redirect_response("/")
-        resp.headers.set("Set-Cookie", make_session_cookie(token, env))
-        return resp
+        return redirect_response("/", make_session_cookie(token, env))
 
     return await render_login_page(env, error="密码错误, 请重试")
 
@@ -630,9 +631,7 @@ class Default(WorkerEntrypoint):
             if path == "/login":
                 return await render_login_page(env, error="管理员未设置站点密码")
             if path == "/logout":
-                resp = redirect_response("/login")
-                resp.headers.set("Set-Cookie", clear_session_cookie(env))
-                return resp
+                return redirect_response("/login", clear_session_cookie(env))
             if path.startswith("/api/"):
                 return json_response({"error": "站点密码未设置"}, 401)
             if path not in ("/robots.txt", "/sw.js"):
@@ -653,9 +652,7 @@ class Default(WorkerEntrypoint):
             return await render_login_page(env)
 
         if path == "/logout":
-            resp = redirect_response("/login")
-            resp.headers.set("Set-Cookie", clear_session_cookie(env))
-            return resp
+            return redirect_response("/login", clear_session_cookie(env))
 
         if path == "/robots.txt":
             return Response(
