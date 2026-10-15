@@ -655,10 +655,7 @@ class Default(WorkerEntrypoint):
             return redirect_response("/login", clear_session_cookie(env))
 
         if path == "/robots.txt":
-            return Response(
-                "User-agent: *\nDisallow: /\n",
-                headers={"Content-Type": "text/plain"},
-            )
+            return await env.ASSETS.fetch(request)
 
         if path == "/sw.js":
             return await env.ASSETS.fetch(request)
