@@ -11,7 +11,12 @@ const STATIC_CACHE = [
 self.addEventListener('install', (event) => {
     event.waitUntil(
         caches.open(CACHE_NAME).then((cache) => {
-            return cache.addAll(STATIC_CACHE).catch((err) => {
+            return Promise.all(STATIC_CACHE.map(async (path) => {
+                const response = await fetch(path);
+                if (response.ok && !response.redirected) {
+                    await cache.put(path, response);
+                }
+            })).catch((err) => {
                 console.log('SW 缓存部分资源失败（可忽略）:', err);
             });
         })
@@ -38,6 +43,7 @@ self.addEventListener('fetch', (event) => {
     // 只处理同源请求
     if (url.origin !== self.location.origin) return;
     if (event.request.method !== 'GET') return;
+    if (event.request.mode === 'navigate' || url.pathname.endsWith('.html')) return;
 
     // 音频流：走网络，不缓存
     if (url.pathname.startsWith('/api/stream/')) {
@@ -59,7 +65,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
         caches.match(event.request).then((cached) => {
             const networkFetch = fetch(event.request).then((response) => {
-                if (response && response.status === 200) {
+                if (response && response.status === 200 && !response.redirected) {
                     const clone = response.clone();
                     caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
                 }

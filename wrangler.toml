@@ -9,6 +9,9 @@ main = "JokerMusic_Worker.py"
 compatibility_date = "2026-10-10"
 compatibility_flags = ["python_workers"]
 
+[observability]
+enabled = true
+
 [observability.logs]
 enabled = true
 head_sampling_rate = 1
@@ -20,8 +23,6 @@ enabled = true
 head_sampling_rate = 1
 persist = true
 
-[observability.issue_detection]
-enabled = true
 
 # -------------------------------------------------------------------------------------------------------------
 # 静态资源目录（Workers Assets）
@@ -30,6 +31,8 @@ enabled = true
 [assets]
 directory = "./static"
 binding = "ASSETS"
+run_worker_first = true
+html_handling = "none"
 
 # -------------------------------------------------------------------------------------------------------------
 # KV 命名空间绑定

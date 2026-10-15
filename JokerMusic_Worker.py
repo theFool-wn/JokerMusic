@@ -6,6 +6,7 @@
 #                        Revised by WangNan, 2026/10/11, adapted for Cloudflare Python Worker
 #                                                        added JWT cookie
 #                        Revised by WangNan, 2026/10/15, fix deployment error
+#                        Revised by WangNan, 2026/10/16, fix Python Workers
 # =============================================================================================================
 
 
@@ -16,31 +17,9 @@ import time
 import base64
 from urllib.parse import unquote, parse_qs
 
-from js import Response, URL, console, Request, Uint8Array, crypto
-from workers import WorkerEntrypoint
-from pyodide.ffi import to_js, JsObject
+from js import URL, console, Request, Uint8Array, crypto
+from workers import WorkerEntrypoint, Response
 
-
-
-def _resp(body, *args, **kwargs):
-    """
-    构造 JS Response，使用 to_js 深度转换 Python dict → JS object
-    避免 Pyodide 浅拷贝导致嵌套 headers dict 类型错误 (JsvFunction_Construct)
-    兼容两种调用: _resp(body, {"status": 200, "headers": {...}})
-                 _resp(body, status=200, headers={...})
-    """
-    if args and isinstance(args[0], dict):
-        opts_in = args[0]
-        status  = opts_in.get("status", 200)
-        headers = opts_in.get("headers")
-    else:
-        status  = kwargs.get("status", 200)
-        headers = kwargs.get("headers")
-
-    opts = {"status": status}
-    if headers:
-        opts["headers"] = headers
-    return Response.new(body, to_js(opts, dict_converter=JsObject))
 
 # =============================================================================================================
 # 第三方包安装
@@ -195,15 +174,16 @@ def get_token_from_cookie(request, env) -> str:
 
 def json_response(data, status=200):
     """统一 JSON 响应"""
-    return _resp(
+    return Response(
         json.dumps(data, ensure_ascii=False),
-        {"status": status, "headers": {"Content-Type": "application/json; charset=utf-8"}},
+        status=status,
+        headers={"Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store"},
     )
 
 
 def redirect_response(location):
     """302 重定向"""
-    return _resp("", {"status": 302, "headers": {"Location": location}})
+    return Response("", status=302, headers={"Location": location, "Cache-Control": "no-store"})
 
 
 def make_session_cookie(token: str, env) -> str:
@@ -231,6 +211,8 @@ def clear_session_cookie(env) -> str:
 
 async def is_logged_in(request, env) -> bool:
     """验证用户是否已登录, 从 Cookie 读 Token, 验证签名"""
+    if not getattr(env, "SITE_PASSWORD", None):
+        return False
     token = get_token_from_cookie(request, env)
     if not token:
         return False
@@ -255,15 +237,18 @@ async def render_login_page(env, error: str = ""):
     登录页渲染
     从 Workers Assets 读取 login.html, 替换错误提示占位符
     """
-    resp = await env.ASSETS.fetch("/login.html")
+    resp = await env.ASSETS.fetch("https://assets.local/login.html")
+    if resp.status != 200:
+        console.error(f"[Joker's Music] login.html 加载失败: {resp.status}")
+        return Response("登录页暂时无法加载", status=503, headers={"Cache-Control": "no-store"})
     html = await resp.text()
 
     error_html = f'<p class="login-error">{error}</p>' if error else ""
     html = html.replace("<!--ERROR_HTML-->", error_html)
 
-    return _resp(
+    return Response(
         html,
-        {"headers": {"Content-Type": "text/html; charset=utf-8"}},
+        headers={"Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store"},
     )
 
 
@@ -424,6 +409,7 @@ async def get_songs(env, force_refresh: bool = False) -> list:
             except Exception:
                 pass
 
+    await ensure_packages()
     songs = await scan_music_library(env)
 
     await env.JokerMusicKV.put(
@@ -440,7 +426,7 @@ async def handle_login_post(request, env):
     处理登录 POST
     验证密码后签发 JWT Token, 写入 Cookie
     """
-    site_password = env.SITE_PASSWORD
+    site_password = getattr(env, "SITE_PASSWORD", None)
 
     if not site_password:
         return await render_login_page(env, error="管理员未设置站点密码")
@@ -507,13 +493,13 @@ async def handle_api_stream(request, env, filename: str):
     try:
         filename = safe_filename(filename)
     except ValueError:
-        return _resp("非法文件名", {"status": 400})
+        return Response("非法文件名", status=400)
 
     key = env.MUSIC_PREFIX + filename
 
     obj_head = await env.JokerMusicLibrary.head(key)
     if obj_head is None:
-        return _resp("音频文件不存在", {"status": 404})
+        return Response("音频文件不存在", status=404)
 
     file_size = obj_head.size
     mime_type = "audio/mpeg"
@@ -536,10 +522,10 @@ async def handle_api_stream(request, env, filename: str):
             if end_str:
                 end = int(end_str)
             if start >= file_size:
-                return _resp("", {"status": 416})
+                return Response("", status=416)
             end = min(end, file_size - 1)
             if start > end:
-                return _resp("", {"status": 416})
+                return Response("", status=416)
 
     content_length = end - start + 1
 
@@ -549,7 +535,7 @@ async def handle_api_stream(request, env, filename: str):
         obj = await env.JokerMusicLibrary.get(key)
 
     if obj is None:
-        return _resp("音频文件不存在", {"status": 404})
+        return Response("音频文件不存在", status=404)
 
     headers = {
         "Content-Type": mime_type,
@@ -560,9 +546,9 @@ async def handle_api_stream(request, env, filename: str):
 
     if has_range:
         headers["Content-Range"] = f"bytes {start}-{end}/{file_size}"
-        return _resp(obj.body, {"status": 206, "headers": headers})
+        return Response(obj.body, status=206, headers=headers)
     else:
-        return _resp(obj.body, {"status": 200, "headers": headers})
+        return Response(obj.body, status=200, headers=headers)
 
 
 def not_found_response(path: str):
@@ -606,7 +592,7 @@ def not_found_response(path: str):
     <a href="/">返回主页</a>
 </body>
 </html>"""
-    return _resp(html, {"status": 404, "headers": {"Content-Type": "text/html; charset=utf-8"}})
+    return Response(html, status=404, headers={"Content-Type": "text/html; charset=utf-8"})
 
 
 class Default(WorkerEntrypoint):
@@ -639,9 +625,24 @@ class Default(WorkerEntrypoint):
         path   = url.pathname
         method = request.method
 
+        if not getattr(env, "SITE_PASSWORD", None):
+            if path == "/login":
+                return await render_login_page(env, error="管理员未设置站点密码")
+            if path == "/logout":
+                resp = redirect_response("/login")
+                resp.headers.set("Set-Cookie", clear_session_cookie(env))
+                return resp
+            if path.startswith("/api/"):
+                return json_response({"error": "站点密码未设置"}, 401)
+            if path not in ("/robots.txt", "/sw.js"):
+                return redirect_response("/login")
+
         # -------------------------------------------------------------------------
         # 公开路由
         # -------------------------------------------------------------------------
+
+        if path == "/login.html":
+            return redirect_response("/login")
 
         if path == "/login":
             if method == "POST":
@@ -656,9 +657,9 @@ class Default(WorkerEntrypoint):
             return resp
 
         if path == "/robots.txt":
-            return _resp(
+            return Response(
                 "User-agent: *\nDisallow: /\n",
-                {"headers": {"Content-Type": "text/plain"}},
+                headers={"Content-Type": "text/plain"},
             )
 
         if path == "/sw.js":
@@ -668,8 +669,10 @@ class Default(WorkerEntrypoint):
             return await env.ASSETS.fetch(request)
 
         if path.startswith("/static/"):
+            if path.endswith(".html") and not await is_logged_in(request, env):
+                return redirect_response("/login")
             asset_path = path[len("/static"):]
-            return await env.ASSETS.fetch(asset_path)
+            return await env.ASSETS.fetch(f"https://assets.local{asset_path}")
 
         # -------------------------------------------------------------------------
         # 以下路由需要登录验证
@@ -679,7 +682,7 @@ class Default(WorkerEntrypoint):
         if path == "/":
             if not logged_in:
                 return redirect_response("/login")
-            return await env.ASSETS.fetch("/index.html")
+            return await env.ASSETS.fetch("https://assets.local/index.html")
 
         if path == "/api/songs":
             if not logged_in:
@@ -706,6 +709,11 @@ class Default(WorkerEntrypoint):
         # -------------------------------------------------------------------------
         # 404
         # -------------------------------------------------------------------------
+        if not logged_in:
+            if path.startswith("/api/"):
+                return json_response({"error": "未登录"}, 401)
+            return redirect_response("/login")
+        
         asset_resp = await env.ASSETS.fetch(request)
         if asset_resp.status != 404:
             return asset_resp
