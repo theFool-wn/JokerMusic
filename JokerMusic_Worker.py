@@ -17,7 +17,8 @@ import time
 import base64
 from urllib.parse import unquote, parse_qs
 
-from js import URL, console, Request, Uint8Array, crypto
+from js import URL, console, Request, Uint8Array, crypto, Object
+from pyodide.ffi import to_js
 from workers import WorkerEntrypoint, Response
 
 
@@ -94,17 +95,17 @@ async def create_token(env) -> str:
     # 导入 HMAC 密钥
     key = await crypto.subtle.importKey(
         "raw",
-        Uint8Array.new(_get_jwt_secret(env).encode("utf-8")),
-        {"name": "HMAC", "hash": "SHA-256"},
+        to_js(_get_jwt_secret(env).encode("utf-8")),
+        to_js({"name": "HMAC", "hash": "SHA-256"}, dict_converter=Object.fromEntries),
         False,
-        ["sign"],
+        to_js(["sign"]),
     )
     
     # 计算签名
     signature = await crypto.subtle.sign(
         "HMAC",
         key,
-        Uint8Array.new(signing_input.encode("utf-8")),
+        to_js(signing_input.encode("utf-8")),
     )
     sig_b64 = _b64url_encode(bytes(Uint8Array.new(signature)))
 
@@ -129,10 +130,10 @@ async def verify_token(env, token: str) -> bool:
         # 导入 HMAC 密钥
         key = await crypto.subtle.importKey(
             "raw",
-            Uint8Array.new(_get_jwt_secret(env).encode("utf-8")),
-            {"name": "HMAC", "hash": "SHA-256"},
+            to_js(_get_jwt_secret(env).encode("utf-8")),
+            to_js({"name": "HMAC", "hash": "SHA-256"}, dict_converter=Object.fromEntries),
             False,
-            ["verify"],
+            to_js(["verify"]),
         )
         
         # 验证签名
@@ -140,8 +141,8 @@ async def verify_token(env, token: str) -> bool:
         valid = await crypto.subtle.verify(
             "HMAC",
             key,
-            Uint8Array.new(signature_bytes),
-            Uint8Array.new(signing_input.encode("utf-8")),
+            to_js(signature_bytes),
+            to_js(signing_input.encode("utf-8")),
         )
         if not valid:
             return False
@@ -254,7 +255,7 @@ async def render_login_page(env, error: str = ""):
 
 class _PartialMP3File:
     """
-    稀疏文件对象：只包含 mp3 文件开头的真实数据，其余位置返回零字节
+    稀疏文件对象：只包含 mp3 文件开头的真实数据，其余位置视为文件结束
     用于节约流量与内存资源
     """
     def __init__(self, header_data: bytes, full_size: int):
@@ -264,25 +265,12 @@ class _PartialMP3File:
         self._pos = 0
 
     def read(self, n: int = -1) -> bytes:
-        if n < 0:
-            n = self._size - self._pos
-        end = min(self._pos + n, self._size)
-        length = end - self._pos
-        if length <= 0:
+        if self._pos >= self._data_len:
             return b""
-
-        if self._pos < self._data_len:
-            # 读取范围有一部分在真实数据内
-            real_end = min(end, self._data_len)
-            chunk = bytearray(self._data[self._pos:real_end])
-            # 超出真实数据的部分用零填充
-            if real_end < end:
-                chunk.extend(b"\x00" * (end - real_end))
-            result = bytes(chunk)
-        else:
-            # 完全在真实数据之外，全返回零
-            result = b"\x00" * length
-
+        if n < 0:
+            n = self._data_len - self._pos
+        end = min(self._pos + n, self._data_len)
+        result = self._data[self._pos:end]
         self._pos = end
         return result
 
@@ -305,9 +293,9 @@ class _PartialMP3File:
 
 async def read_id3_tag(env, key: str) -> dict:
     """
-    从 R2 下载 MP3 到内存, 读取 ID3 标签
+    从 R2 分段读取 MP3 开头, 读取 ID3 标签
     只下载前 512KB (覆盖 ID3v2 + MPEG 帧头)，不完整下载
-    用 _PartialMP3File 虚拟文件对象让 mutagen 以为在读完整文件
+    用 _PartialMP3File 向 mutagen 报告完整文件大小，但只提供已下载的数据
     """
     info = {"title": "", "artist": "", "album": "", "duration": 0}
 
@@ -325,7 +313,7 @@ async def read_id3_tag(env, key: str) -> dict:
         header_size = min(int(env.ID3_HEADER_SIZE), file_size)
         header_obj = await env.JokerMusicLibrary.get(
             key,
-            {"range": {"start": 0, "end": header_size - 1}}
+            to_js({"range": {"offset": 0, "length": header_size}}, dict_converter=Object.fromEntries)
         )
         
         if header_obj is None:
@@ -360,7 +348,9 @@ async def scan_music_library(env) -> list:
     """
     songs = []
 
-    result = await env.JokerMusicLibrary.list({"prefix": env.MUSIC_PREFIX})
+    result = await env.JokerMusicLibrary.list(
+        to_js({"prefix": env.MUSIC_PREFIX}, dict_converter=Object.fromEntries)
+    )
     objects = result.objects
 
     for obj in objects:
@@ -511,26 +501,38 @@ async def handle_api_stream(request, env, filename: str):
     end = file_size - 1
     has_range = False
 
-    if range_header.startswith("bytes="):
+    if range_header.startswith("bytes=") and "," not in range_header:
         has_range = True
         range_value = range_header[6:]
         if "-" in range_value:
-            parts = range_value.split(",")[0].split("-", 1)
+            parts = range_value.split("-", 1)
             start_str, end_str = parts[0], parts[1]
-            if start_str:
-                start = int(start_str)
-            if end_str:
-                end = int(end_str)
-            if start >= file_size:
+            try:
+                if start_str:
+                    start = int(start_str)
+                    if end_str:
+                        end = int(end_str)
+                elif end_str:
+                    start = max(0, file_size - int(end_str))
+                else:
+                    return Response("", status=416)
+            except ValueError:
+                return Response("", status=416)
+            if start < 0 or start >= file_size:
                 return Response("", status=416)
             end = min(end, file_size - 1)
             if start > end:
                 return Response("", status=416)
+        else:
+            return Response("", status=416)
 
     content_length = end - start + 1
 
     if has_range:
-        obj = await env.JokerMusicLibrary.get(key, {"range": {"start": start, "end": end}})
+        obj = await env.JokerMusicLibrary.get(
+            key,
+            to_js({"range": {"offset": start, "length": content_length}}, dict_converter=Object.fromEntries),
+        )
     else:
         obj = await env.JokerMusicLibrary.get(key)
 
@@ -619,7 +621,6 @@ class Default(WorkerEntrypoint):
     
     async def fetch(self, request):
         env = self.env
-        await ensure_packages()
 
         url    = URL.new(request.url)
         path   = url.pathname
