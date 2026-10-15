@@ -11,6 +11,8 @@ compatibility_flags = ["python_workers"]
 
 [observability]
 enabled = true
+head_sampling_rate = 1
+redact_query_string = false
 
 [observability.logs]
 enabled = true
@@ -22,6 +24,9 @@ persist = true
 enabled = true
 head_sampling_rate = 1
 persist = true
+
+[observability.issue_detection]
+enabled = true
 
 
 # -------------------------------------------------------------------------------------------------------------
