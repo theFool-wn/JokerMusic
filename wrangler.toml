@@ -36,7 +36,7 @@ enabled = true
 [assets]
 directory = "./static"
 binding = "ASSETS"
-run_worker_first = ["/", "/*", "!/robots.txt", "!/sw.js", "!/manifest.json"]
+run_worker_first = ["/*", "!/robots.txt", "!/sw.js", "!/manifest.json"]
 html_handling = "none"
 
 # -------------------------------------------------------------------------------------------------------------
@@ -74,7 +74,7 @@ LYRIC_PREFIX  = "lyrics/"
 
 # KV 缓存
 CACHE_KEY     = "cache:song_list"   # 歌库缓存
-ID3_PER_RELOAD = 5                  # 每次 Reload 最多解析 1 首新歌，避免触发 CPU 限制
+ID3_PER_RELOAD = 5                  # 每次 Reload 最多解析 5 首新歌，避免触发 CPU 限制
 
 # JWT Token 有效期 (30 天免登录)
 TOKEN_TTL_DAYS = 30
