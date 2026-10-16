@@ -17,7 +17,7 @@ import time
 import base64
 from urllib.parse import unquote, parse_qs
 
-from js import URL, console, Request, Uint8Array, crypto, Object
+from js import URL, console, Request, Uint8Array, crypto, Object, JSON
 from pyodide.ffi import to_js
 from workers import WorkerEntrypoint, Response
 
@@ -34,13 +34,12 @@ async def ensure_packages():
         return
         
     try:
-        import mutagen
-        import pypinyin
+        import mutagen.mp3
     except ImportError:
         try:
             import micropip
-            await micropip.install(["mutagen", "pypinyin"])
-            console.log("[Joker's Music] mutagen/pypinyin installed via micropip")
+            await micropip.install(["mutagen"])
+            console.log("[Joker's Music] mutagen installed via micropip")
         except Exception as e:
             console.log(f"[Joker's Music] package import failed: {e}")
     _PACKAGES_READY = True
@@ -294,7 +293,7 @@ class _PartialMP3File:
         pass
 
 
-async def read_id3_tag(env, key: str) -> dict:
+async def read_id3_tag(env, key: str, file_size=None) -> dict:
     """
     从 R2 分段读取 MP3 开头, 读取 ID3 标签
     只下载前 512KB (覆盖 ID3v2 + MPEG 帧头)，不完整下载
@@ -305,11 +304,13 @@ async def read_id3_tag(env, key: str) -> dict:
     try:
         from mutagen.mp3 import MP3
 
-        obj_head = await env.JokerMusicLibrary.head(key)
-        if obj_head is None:
-            return info
-        file_size = obj_head.size
+        if file_size is None:
+            obj_head = await env.JokerMusicLibrary.head(key)
+            if obj_head is None:
+                return info
+            file_size = obj_head.size
 
+        file_size = int(file_size)
         if file_size <= 0:
             return info
             
@@ -344,72 +345,133 @@ async def read_id3_tag(env, key: str) -> dict:
     return info
 
 
-async def scan_music_library(env) -> list:
+def _listed_objects(page) -> list:
+    """一次转换 R2 列表，避免逐个对象跨越 Python/JavaScript 边界"""
+    try:
+        objects = json.loads(str(JSON.stringify(page.objects)))
+        if isinstance(objects, list) and all(isinstance(obj, dict) and "key" in obj for obj in objects):
+            return objects
+    except Exception:
+        pass
+
+    objects = []
+    for obj in page.objects:
+        metadata = getattr(obj, "customMetadata", None)
+        try:
+            metadata = json.loads(str(JSON.stringify(metadata))) if metadata is not None else {}
+        except Exception:
+            metadata = {}
+        objects.append({"key": str(obj.key), "etag": str(obj.etag), "customMetadata": metadata})
+    return objects
+
+
+async def _list_r2_objects(env, prefix: str, include_metadata: bool = False) -> list:
+    """按 R2 游标列出指定前缀的全部对象"""
+    objects = []
+    cursor = None
+    while True:
+        options = {"prefix": prefix, "limit": 1000}
+        if include_metadata:
+            options["include"] = ["customMetadata"]
+        if cursor:
+            options["cursor"] = cursor
+        page = await env.JokerMusicLibrary.list(
+            to_js(options, dict_converter=Object.fromEntries)
+        )
+        objects.extend(_listed_objects(page))
+        if not page.truncated:
+            return objects
+        cursor = str(page.cursor)
+        if not cursor:
+            raise RuntimeError("R2 列表已截断，但没有返回游标")
+
+
+async def scan_music_library(env, previous_songs=None, parse_new_limit: int = 0) -> list:
     """
-    扫描 R2 中 music/ 前缀下的全部 MP3, 读取 ID3 标签, 匹配同名 LRC 歌词
-    返回歌曲列表, 按标题拼音排序
+    扫描 R2 中 music/ 和 lyrics/ 的对象列表
+    已有歌曲沿用 KV 信息；每次最多解析指定数量的新歌或变更歌曲
     """
+    previous = {
+        song["filename"]: song for song in (previous_songs or [])
+        if isinstance(song, dict) and isinstance(song.get("filename"), str)
+    }
+    music_objects = await _list_r2_objects(env, env.MUSIC_PREFIX, include_metadata=True)
+    lyric_objects = await _list_r2_objects(env, env.LYRIC_PREFIX)
+    lyric_keys = {obj["key"] for obj in lyric_objects if obj["key"].lower().endswith(".lrc")}
     songs = []
+    pending = []
 
-    result = await env.JokerMusicLibrary.list(
-        to_js({"prefix": env.MUSIC_PREFIX}, dict_converter=Object.fromEntries)
-    )
-    objects = result.objects
-
-    for obj in objects:
-        key = obj.key
+    for obj in music_objects:
+        key = obj["key"]
         fname = key[len(env.MUSIC_PREFIX):]
-
         if not fname.lower().endswith(".mp3"):
             continue
 
-        tag = await read_id3_tag(env, key)
-
-        base_name = fname[:-4] if fname.lower().endswith(".mp3") else fname
-        title = tag["title"] if tag["title"] else base_name
+        base_name = fname[:-4]
+        etag = str(obj.get("etag") or "")
+        old = previous.get(fname) or {}
+        changed = bool(old.get("etag") and etag and old["etag"] != etag)
+        metadata = obj.get("customMetadata") or {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        raw_duration = metadata.get("duration") or old.get("duration") or 0
+        try:
+            duration = max(0, round(float(raw_duration), 2))
+        except (ValueError, TypeError):
+            duration = 0
 
         # 检查同名 LRC 歌词是否存在
         lrc_key = env.LYRIC_PREFIX + base_name + ".lrc"
-        lrc_obj = await env.JokerMusicLibrary.head(lrc_key)
-        has_lyric = lrc_obj is not None
-
-        songs.append({
+        song = {
             "filename": fname,
-            "title": title,
-            "artist": tag["artist"],
-            "album": tag["album"],
-            "duration": tag["duration"],
-            "has_lyric": has_lyric,
-        })
+            "title": str(metadata.get("title") or old.get("title") or base_name),
+            "artist": str(metadata.get("artist") or old.get("artist") or ""),
+            "album": str(metadata.get("album") or old.get("album") or ""),
+            "duration": duration,
+            "has_lyric": lrc_key in lyric_keys,
+            "etag": etag,
+        }
+        has_r2_metadata = all(metadata.get(field) is not None for field in ("title", "artist", "album", "duration"))
+        if not has_r2_metadata and (not old or changed or old.get("_id3_pending")):
+            song["_id3_pending"] = True
+            pending.append((song, key, obj.get("size")))
+        songs.append(song)
 
-    # 按标题拼音排序
-    try:
-        from pypinyin import lazy_pinyin
-        songs.sort(key=lambda s: "".join(lazy_pinyin(s["title"])))
-    except Exception:
-        songs.sort(key=lambda s: s["title"])
+    for song, key, file_size in pending[:parse_new_limit]:
+        await ensure_packages()
+        id3 = await read_id3_tag(env, key, file_size=file_size)
+        for field in ("title", "artist", "album"):
+            if id3.get(field):
+                song[field] = id3[field]
+        if id3.get("duration"):
+            song["duration"] = id3["duration"]
+        song.pop("_id3_pending", None)
 
+    # 前端负责按标题拼音排序
     return songs
 
 
 async def get_songs(env, force_refresh: bool = False) -> list:
     """获取歌库, 带 KV 缓存"""
-    if not force_refresh:
-        cached_str = await env.JokerMusicKV.get(env.CACHE_KEY)
-        if cached_str:
-            try:
-                return json.loads(cached_str)
-            except Exception:
-                pass
+    previous_songs = []
+    cached_str = await env.JokerMusicKV.get(env.CACHE_KEY)
+    if cached_str:
+        try:
+            previous_songs = json.loads(cached_str)
+            if not isinstance(previous_songs, list):
+                previous_songs = []
+            elif not force_refresh:
+                return previous_songs
+        except Exception:
+            previous_songs = []
 
-    await ensure_packages()
-    songs = await scan_music_library(env)
+    songs = await scan_music_library(env, previous_songs, parse_new_limit=max(0, int(env.ID3_PER_RELOAD)) if force_refresh else 0)
 
-    await env.JokerMusicKV.put(
-        env.CACHE_KEY,
-        json.dumps(songs, ensure_ascii=False),
-        expirationTtl=int(env.CACHE_TTL),
-    )
+    if songs != previous_songs:
+        await env.JokerMusicKV.put(
+            env.CACHE_KEY,
+            json.dumps(songs, ensure_ascii=False),
+        )
 
     return songs
 
