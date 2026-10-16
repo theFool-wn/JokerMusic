@@ -257,7 +257,7 @@ async def render_login_page(env, error: str = ""):
 
 class _PartialMP3File:
     """
-    稀疏文件对象：只包含 mp3 文件开头的真实数据，其余位置视为文件结束
+    稀疏文件对象：只包含 mp3 文件开头的真实数据, 其余位置视为文件结束
     用于节约流量与内存资源
     """
     def __init__(self, header_data: bytes, full_size: int):
@@ -296,8 +296,8 @@ class _PartialMP3File:
 async def read_id3_tag(env, key: str, file_size=None) -> dict:
     """
     从 R2 分段读取 MP3 开头, 读取 ID3 标签
-    只下载前 512KB (覆盖 ID3v2 + MPEG 帧头)，不完整下载
-    用 _PartialMP3File 向 mutagen 报告完整文件大小，但只提供已下载的数据
+    只下载前 512KB (覆盖 ID3v2 + MPEG 帧头), 不完整下载
+    用 _PartialMP3File 向 mutagen 报告完整文件大小, 但只提供已下载的数据
     """
     info = {"title": "", "artist": "", "album": "", "duration": 0}
 
@@ -346,7 +346,7 @@ async def read_id3_tag(env, key: str, file_size=None) -> dict:
 
 
 def _listed_objects(page) -> list:
-    """一次转换 R2 列表，避免逐个对象跨越 Python/JavaScript 边界"""
+    """一次转换 R2 列表, 避免逐个对象跨越 Python/JavaScript 边界"""
     try:
         objects = json.loads(str(JSON.stringify(page.objects)))
         if isinstance(objects, list) and all(isinstance(obj, dict) and "key" in obj for obj in objects):
@@ -383,7 +383,7 @@ async def _list_r2_objects(env, prefix: str, include_metadata: bool = False) -> 
             return objects
         cursor = str(page.cursor)
         if not cursor:
-            raise RuntimeError("R2 列表已截断，但没有返回游标")
+            raise RuntimeError("R2 列表已截断, 但没有返回游标")
 
 
 async def scan_music_library(env, previous_songs=None, parse_new_limit: int = 0) -> list:
