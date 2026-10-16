@@ -25,23 +25,27 @@ from workers import WorkerEntrypoint, Response
 # =============================================================================================================
 # 第三方包安装
 # =============================================================================================================
-_PACKAGES_READY = False
+try:
+    from mutagen.mp3 import MP3
+    _PACKAGES_READY = True
+except ImportError:
+    MP3 = None
+    _PACKAGES_READY = False
 
 async def ensure_packages():
     """确认依赖可用"""
-    global _PACKAGES_READY
+    global _PACKAGES_READY, MP3
     if _PACKAGES_READY:
         return
         
     try:
-        import mutagen.mp3
-    except ImportError:
-        try:
-            import micropip
-            await micropip.install(["mutagen"])
-            console.log("[Joker's Music] mutagen installed via micropip")
-        except Exception as e:
-            console.log(f"[Joker's Music] package import failed: {e}")
+        import micropip
+        await micropip.install(["mutagen"])
+        from mutagen.mp3 import MP3
+        console.log("[Joker's Music] mutagen installed via micropip")
+    except Exception as e:
+        console.log(f"[Joker's Music] package import failed: {type(e).__name__}: {e!r}")
+        raise
     _PACKAGES_READY = True
 
 
@@ -293,38 +297,56 @@ class _PartialMP3File:
         pass
 
 
-async def read_id3_tag(env, key: str, file_size=None) -> dict:
+async def read_id3_tag(env, key: str, file_size=None) -> tuple[dict, bool]:
     """
     从 R2 分段读取 MP3 开头, 读取 ID3 标签
-    只下载前 512KB (覆盖 ID3v2 + MPEG 帧头), 不完整下载
+    读取完整 ID3v2 标签及后续 MPEG 帧头, 不完整下载 MP3
     用 _PartialMP3File 向 mutagen 报告完整文件大小, 但只提供已下载的数据
     """
     info = {"title": "", "artist": "", "album": "", "duration": 0}
 
     try:
-        from mutagen.mp3 import MP3
-
         if file_size is None:
             obj_head = await env.JokerMusicLibrary.head(key)
             if obj_head is None:
-                return info
+                return info, False
             file_size = obj_head.size
 
         file_size = int(file_size)
         if file_size <= 0:
-            return info
+            return info, False
+
+        tag_obj = await env.JokerMusicLibrary.get(
+            key,
+            to_js({"range": {"offset": 0, "length": min(10, file_size)}}, dict_converter=Object.fromEntries)
+        )
+        if tag_obj is None:
+            return info, False
+        tag_header = bytes(Uint8Array.new(await tag_obj.arrayBuffer()))
+
+        required_size = 0
+        if len(tag_header) == 10 and tag_header[:3] == b"ID3":
+            size_bytes = tag_header[6:10]
+            if any(byte & 0x80 for byte in size_bytes):
+                raise ValueError("无效的 ID3 标签长度")
+            tag_size = ((size_bytes[0] << 21) | (size_bytes[1] << 14) |
+                        (size_bytes[2] << 7) | size_bytes[3])
+            tag_end = 10 + tag_size + (10 if tag_header[3] == 4 and tag_header[5] & 0x10 else 0)
+            if tag_end > file_size:
+                raise ValueError(f"ID3 标签长度 {tag_end} 超出文件长度 {file_size}")
+            required_size = tag_end + 65536
             
-        header_size = min(int(env.ID3_HEADER_SIZE), file_size)
+        header_size = min(max(int(env.ID3_HEADER_SIZE), required_size), file_size)
         header_obj = await env.JokerMusicLibrary.get(
             key,
             to_js({"range": {"offset": 0, "length": header_size}}, dict_converter=Object.fromEntries)
         )
         
         if header_obj is None:
-            return info
+            return info, False
         header_data = bytes(Uint8Array.new(await header_obj.arrayBuffer()))
         if not header_data:
-            return info
+            return info, False
 
         virtual_file = _PartialMP3File(header_data, file_size)
         audio = MP3(virtual_file)
@@ -339,10 +361,12 @@ async def read_id3_tag(env, key: str, file_size=None) -> dict:
         if audio.info and audio.info.length:
             info["duration"] = round(audio.info.length, 2)
 
-    except Exception as e:
-        console.log(f"[Joker's Music] 读取ID3失败 ({key}): {e}")
+        return info, True
 
-    return info
+    except Exception as e:
+        console.log(f"[Joker's Music] 读取ID3失败 ({key}): {type(e).__name__}: {e!r}")
+
+    return info, False
 
 
 def _listed_objects(page) -> list:
@@ -432,20 +456,22 @@ async def scan_music_library(env, previous_songs=None, parse_new_limit: int = 0)
             "etag": etag,
         }
         has_r2_metadata = all(metadata.get(field) is not None for field in ("title", "artist", "album", "duration"))
-        if not has_r2_metadata and (not old or changed or old.get("_id3_pending")):
+        old_failed_without_flag = old and not old.get("artist") and not old.get("album") and not old.get("duration")
+        if not has_r2_metadata and (not old or changed or old.get("_id3_pending") or old_failed_without_flag):
             song["_id3_pending"] = True
             pending.append((song, key, obj.get("size")))
         songs.append(song)
 
     for song, key, file_size in pending[:parse_new_limit]:
         await ensure_packages()
-        id3 = await read_id3_tag(env, key, file_size=file_size)
+        id3, parsed = await read_id3_tag(env, key, file_size=file_size)
         for field in ("title", "artist", "album"):
             if id3.get(field):
                 song[field] = id3[field]
         if id3.get("duration"):
             song["duration"] = id3["duration"]
-        song.pop("_id3_pending", None)
+        if parsed:
+            song.pop("_id3_pending", None)
 
     # 前端负责按标题拼音排序
     return songs
