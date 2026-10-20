@@ -1,6 +1,6 @@
 # Joker's Music · 薛之谦私人音乐播放器 (Cloudflare Worker 版)
 
-[![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-blue.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)  ![Made by Wang Nan](https://img.shields.io/badge/Made%20by-Wang%20Nan-brightgreen)  ![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-orange)  ![Python](https://img.shields.io/badge/Python-3.x-blue)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0.html)  ![Made by Wang Nan](https://img.shields.io/badge/Made%20by-Wang%20Nan-brightgreen)  ![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-orange)  ![Python](https://img.shields.io/badge/Python-3.x-blue)
 
 基于 **Cloudflare Python Worker** 的私人音乐播放器, 音频文件存放在 **R2 对象存储**, 歌库缓存使用 **KV**, 静态资源通过 **Workers Assets** 分发。无需自有服务器, 全程运行在 Cloudflare 边缘网络。
 
