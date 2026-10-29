@@ -1,4 +1,5 @@
 # @             Project: JokerMusic -> JokerMusic_Worker.py
+# @     Release Version: 1.1.0
 # @              Author: WangNan
 # @       Creation Date: 2026/9/5 16:37
 # @         Description: A Private Music Player about Joker Xue

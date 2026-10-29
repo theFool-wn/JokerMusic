@@ -1,84 +1,62 @@
-const CACHE_NAME = 'JokerMusic';
+// Static assets only
+const VERSION = '1.1.0';
+const CACHE_PREFIX = 'JokerMusic-static-';
+const CACHE_NAME = CACHE_PREFIX + VERSION;
 const STATIC_CACHE = [
     '/static/css/style.css',
-    '/static/js/app.js',
+    `/static/js/playback.js?v=${VERSION}`,
+    `/static/js/app.js?v=${VERSION}`,
     '/static/manifest.json',
     '/static/img/icon-192.png',
     '/static/img/icon-512.png',
 ];
 
-// 安装：缓存核心静态资源
-self.addEventListener('install', (event) => {
-    event.waitUntil(
-        caches.open(CACHE_NAME).then((cache) => {
-            return Promise.all(STATIC_CACHE.map(async (path) => {
-                const response = await fetch(path);
-                if (response.ok && !response.redirected) {
-                    await cache.put(path, response);
-                }
-            })).catch((err) => {
-                console.log('SW 缓存部分资源失败（可忽略）:', err);
+self.addEventListener('install', event => {
+    event.waitUntil((async () => {
+        const cache = await caches.open(CACHE_NAME);
+        const responses = await Promise.all(STATIC_CACHE.map(async path => {
+            const response = await fetch(path, {
+                cache: 'reload'
             });
-        })
-    );
-    self.skipWaiting();
+            if (!response.ok || response.redirected) throw new Error('Precache failed: ' + path);
+            return response;
+        }));
+        // Incomplete downloads must not replace the previous working cache.
+        await Promise.all(responses.map((response, i) => cache.put(STATIC_CACHE[i], response)));
+        await self.skipWaiting();
+    })());
 });
 
-// 激活：清理旧缓存，立即接管页面
-self.addEventListener('activate', (event) => {
-    event.waitUntil(
-        caches.keys().then((keys) => {
-            return Promise.all(
-                keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
-            );
-        })
-    );
-    self.clients.claim();
+self.addEventListener('activate', event => {
+    event.waitUntil((async () => {
+        const keys = await caches.keys();
+        await Promise.all(keys.filter(key => key !== CACHE_NAME &&
+            (key === 'JokerMusic' || key.startsWith(CACHE_PREFIX))).map(key => caches.delete(key)));
+        await self.clients.claim();
+    })());
 });
 
-// 拦截请求
-self.addEventListener('fetch', (event) => {
+self.addEventListener('fetch', event => {
     const url = new URL(event.request.url);
-
-    // 只处理同源请求
-    if (url.origin !== self.location.origin) return;
-    if (event.request.method !== 'GET') return;
-    if (event.request.mode === 'navigate' || url.pathname.endsWith('.html')) return;
-
-    // 音频流：走网络，不缓存
-    if (url.pathname.startsWith('/api/stream/')) {
-        return; // 不调用 respondWith，让浏览器默认走网络
-    }
-
-    // 所有 API 请求：走网络，不缓存（依赖登录态，缓存会导致错误）
-    if (url.pathname.startsWith('/api/')) {
-        return;
-    }
-
-    // API 请求：网络优先，失败时返回缓存
-    // 页面（/ 和 /login）：走网络，不缓存（有登录重定向）
-    if (url.pathname === '/' || url.pathname === '/login') {
-        return;
-    }
-
-    // 静态资源：缓存优先，后台更新
-    event.respondWith(
-        caches.match(event.request).then((cached) => {
-            const networkFetch = fetch(event.request).then((response) => {
-                if (response && response.status === 200 && !response.redirected) {
-                    const clone = response.clone();
-                    caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-                }
+    if (event.request.method !== 'GET' || url.origin !== self.location.origin ||
+        event.request.mode === 'navigate' || !STATIC_CACHE.includes(url.pathname + url.search)) return;
+    // Network first; never intercept HTML, login/logout, APIs or audio/Range requests.
+    event.respondWith((async () => {
+        const cache = await caches.open(CACHE_NAME);
+        try {
+            const response = await fetch(event.request);
+            if (response.ok && !response.redirected) {
+                // Storage pressure must not turn a successful network load into an error.
+                await cache.put(event.request, response.clone()).catch(() => {});
                 return response;
-            }).catch(() => cached);
-            return cached || networkFetch;
-        })
-    );
+            }
+            return (await cache.match(event.request)) || response;
+        } catch (error) {
+            return (await cache.match(event.request)) || Response.error();
+        }
+    })());
 });
 
-// 接收来自页面的消息
-self.addEventListener('message', (event) => {
-    if (event.data && event.data.type === 'SKIP_WAITING') {
-        self.skipWaiting();
-    }
+self.addEventListener('message', event => {
+    if (event.data?.type === 'SKIP_WAITING') event.waitUntil(self.skipWaiting());
 });

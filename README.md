@@ -1,10 +1,17 @@
-# Joker's Music · 薛之谦私人音乐播放器 (Cloudflare Worker 版)
+# Joker's Music · 薛之谦私人音乐播放器
 
-[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0.html)  ![Made by Wang Nan](https://img.shields.io/badge/Made%20by-Wang%20Nan-brightgreen)  ![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-orange)  ![Python](https://img.shields.io/badge/Python-3.x-blue)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0.html)  ![Made by Wang Nan](https://img.shields.io/badge/Made%20by-Wang%20Nan-brightgreen)  ![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-orange)  ![Python](https://img.shields.io/badge/Python-3.x-blue)  ![Platform](https://img.shields.io/badge/Platform-Web%20%2F%20Android-blueviolet)
 
 基于 **Cloudflare Python Worker** 的私人音乐播放器, 音频文件存放在 **R2 对象存储**, 歌库缓存使用 **KV**, 静态资源通过 **Workers Assets** 分发。无需自有服务器, 全程运行在 Cloudflare 边缘网络。
 
 > **本项目为个人前端学习练习, 非盈利, 不提供音视频资源下载。歌曲、歌词版权归原著作权人所有。**
+
+## UPDATE
+
+当前版本：**1.1.0**
+版本源 `static/version.json`, 使用 `python scripts/version.py --write`同步版本, `--check` 校验
+
+新增 WebView + Media3 Android 壳：网站提供界面、歌库和鉴权, 原生前台媒体服务负责后台播放及完整队列自动切歌
 
 ## 功能特性
 

@@ -1,0 +1,238 @@
+name: Build Android APK
+"on":
+    workflow_dispatch: null
+    push:
+        branches:
+            - main
+        tags:
+            - v*
+        paths:
+            - android/**
+            - static/**
+            - scripts/version.py
+            - tests/**
+            - pyproject.toml
+            - JokerMusic_Worker.py
+            - README.md
+            - .github/workflows/android-apk.yml
+permissions:
+    contents: write
+concurrency:
+    group: android-apk-${{ github.ref }}
+    cancel-in-progress: ${{ github.ref_type != 'tag' }}
+jobs:
+    apk:
+        runs-on: ubuntu-latest
+        timeout-minutes: 25
+        steps:
+            -
+                uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+                with:
+                    persist-credentials: false
+            -
+                uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad
+                with:
+                    distribution: temurin
+                    java-version: "17"
+            -
+                uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+                with:
+                    node-version: "22"
+            -
+                uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+                with:
+                    python-version: "3.13"
+            -
+                uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6
+            -
+                name: Check web code and unified release version
+                id: version
+                shell: bash
+                run: |
+                    python scripts/version.py --check
+                    python -c "import ast, pathlib; ast.parse(pathlib.Path('JokerMusic_Worker.py').read_text(encoding='utf-8'))"
+                    node --check static/js/app.js
+                    node --check static/js/playback.js
+                    node --check static/sw.js
+                    node --test tests/*.test.cjs
+                    python -c "import json, os; v=json.load(open('static/version.json', encoding='utf-8'))['version']; print('name=' + v, file=open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8'))"
+            -
+                name: Check release tag matches app version
+                if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+                env:
+                    RELEASE_TAG: ${{ github.ref_name }}
+                    APP_VERSION: ${{ steps.version.outputs.name }}
+                shell: bash
+                run: |
+                    if [ "$RELEASE_TAG" != "v$APP_VERSION" ]; then
+                        echo '::error::The pushed tag must equal v plus the version in static/version.json.'
+                        exit 1
+                    fi
+            -
+                name: Prepare optional persistent release signing key
+                id: signing
+                env:
+                    REQUIRE_RELEASE: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+                    KEY_BASE64: ${{ secrets.JOKER_KEYSTORE_BASE64 }}
+                    STORE_PASSWORD: ${{ secrets.JOKER_STORE_PASSWORD }}
+                    KEY_ALIAS: ${{ secrets.JOKER_KEY_ALIAS }}
+                    KEY_PASSWORD: ${{ secrets.JOKER_KEY_PASSWORD }}
+                shell: bash
+                run: |
+                    if [ -z "$KEY_BASE64" ]; then
+                        if [ "$REQUIRE_RELEASE" = 'true' ]; then
+                            echo '::error::A release tag requires the four JOKER signing secrets.'
+                            exit 1
+                        fi
+                        echo 'No release signing key configured; building debug only.'
+                    else
+                        if [ -z "$STORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
+                            echo '::error::JOKER_STORE_PASSWORD, JOKER_KEY_ALIAS and JOKER_KEY_PASSWORD are required.'
+                            exit 1
+                        fi
+                        umask 077
+                        printf '%s' "$KEY_BASE64" | base64 --decode > "$RUNNER_TEMP/joker-release.jks"
+                        test -s "$RUNNER_TEMP/joker-release.jks"
+                        echo 'enabled=true' >> "$GITHUB_OUTPUT"
+                    fi
+            -
+                name: Install Android SDK packages
+                shell: bash
+                run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
+            -
+                name: Compile, test and lint
+                working-directory: android
+                run: bash gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
+            -
+                name: Build and verify signed release APK
+                if: steps.signing.outputs.enabled == 'true'
+                working-directory: android
+                env:
+                    JOKER_KEYSTORE: ${{ runner.temp }}/joker-release.jks
+                    JOKER_STORE_PASSWORD: ${{ secrets.JOKER_STORE_PASSWORD }}
+                    JOKER_KEY_ALIAS: ${{ secrets.JOKER_KEY_ALIAS }}
+                    JOKER_KEY_PASSWORD: ${{ secrets.JOKER_KEY_PASSWORD }}
+                shell: bash
+                run: |
+                    bash gradlew --no-daemon :app:assembleRelease :app:lintRelease
+                    "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose app/build/outputs/apk/release/app-release.apk
+            -
+                uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+                with:
+                    name: JokerMusic-${{ steps.version.outputs.name }}-debug
+                    path: android/app/build/outputs/apk/debug/app-debug.apk
+                    if-no-files-found: error
+                    retention-days: 14
+            -
+                uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+                if: steps.signing.outputs.enabled == 'true'
+                with:
+                    name: JokerMusic-${{ steps.version.outputs.name }}-release
+                    path: android/app/build/outputs/apk/release/app-release.apk
+                    if-no-files-found: error
+                    retention-days: 14
+            -
+                name: Publish signed APK to GitHub Release
+                if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && steps.signing.outputs.enabled == 'true'
+                env:
+                    GH_TOKEN: ${{ github.token }}
+                    GH_REPO: ${{ github.repository }}
+                    RELEASE_TAG: ${{ github.ref_name }}
+                    APP_VERSION: ${{ steps.version.outputs.name }}
+                shell: python
+                run: |
+                    import hashlib
+                    import json
+                    import os
+                    from pathlib import Path
+                    import shutil
+                    import subprocess
+
+                    tag = os.environ['RELEASE_TAG']
+                    version = os.environ['APP_VERSION']
+                    endpoint = f"repos/{os.environ['GH_REPO']}/releases"
+
+                    def gh(*args):
+                        # A failed request must not be mistaken for a missing release.
+                        return subprocess.run(
+                            ['gh', *args], check=True, text=True, stdout=subprocess.PIPE
+                        ).stdout
+
+                    def pages(url):
+                        result = json.loads(gh('api', '--paginate', '--slurp', url))
+                        return [item for page in result for item in page]
+
+                    def find_release():
+                        matches = [r for r in pages(f'{endpoint}?per_page=100') if r['tag_name'] == tag]
+                        if len(matches) > 1:
+                            raise SystemExit('Multiple releases use this tag; resolve them before retrying.')
+                        return matches[0] if matches else None
+
+                    def check_draft(release):
+                        if release['tag_name'] != tag:
+                            raise SystemExit('Release tag changed; refusing to modify it.')
+                        if release['draft'] is False:
+                            print(f'::notice::Release {tag} is already published; skipping further changes.')
+                            raise SystemExit(0)
+                        if release['draft'] is not True:
+                            raise SystemExit('Unexpected release state; refusing to modify it.')
+
+                    release = find_release()
+                    if release is not None:
+                        check_draft(release)
+
+                    directory = Path('release-assets')
+                    directory.mkdir(exist_ok=True)
+                    apk = directory / f'JokerMusic-{version}.apk'
+                    shutil.copyfile('android/app/build/outputs/apk/release/app-release.apk', apk)
+                    if apk.stat().st_size == 0:
+                        raise SystemExit('The release APK is empty.')
+                    checksum = directory / f'{apk.name}.sha256'
+                    checksum.write_text(
+                        f'{hashlib.sha256(apk.read_bytes()).hexdigest()}  {apk.name}\n',
+                        encoding='utf-8', newline='\n'
+                    )
+
+                    if release is None:
+                        gh('release', 'create', tag, '--draft', '--verify-tag',
+                            '--title', f'JokerMusic {version}', '--generate-notes')
+                        release = find_release()
+                        if release is None:
+                            raise SystemExit('Created draft was not found; retry after checking GitHub.')
+                        print(f'Created draft for {tag}.')
+                    else:
+                        print(f'Resuming draft for {tag}; keeping its title, notes and other assets.')
+
+                    release_url = f"{endpoint}/{release['id']}"
+                    check_draft(json.loads(gh('api', release_url)))
+                    # Replace only these two assets, and only while the release is a draft.
+                    gh('release', 'upload', tag, str(apk), str(checksum), '--clobber')
+
+                    uploaded = {asset['name']: asset for asset in pages(f'{release_url}/assets?per_page=100')}
+                    for file in (apk, checksum):
+                        asset = uploaded.get(file.name, {})
+                        if asset.get('state') != 'uploaded' or asset.get('size') != file.stat().st_size:
+                            raise SystemExit(f'Incomplete upload: {file.name}; draft left unpublished.')
+                        digest = asset.get('digest')
+                        if digest and digest != f'sha256:{hashlib.sha256(file.read_bytes()).hexdigest()}':
+                            raise SystemExit(f'Checksum mismatch: {file.name}; draft left unpublished.')
+
+                    # Recheck before publishing; upload/verification errors leave a resumable draft.
+                    check_draft(json.loads(gh('api', release_url)))
+                    published = json.loads(gh('api', '--method', 'PATCH', release_url, '-F', 'draft=false'))
+                    if published['draft'] is not False or published['tag_name'] != tag:
+                        raise SystemExit('GitHub did not confirm publication; inspect the release before retrying.')
+                    print(f"Published {tag}: {published['html_url']}")
+            -
+                uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+                if: always()
+                with:
+                    name: Android-verification-reports
+                    path: android/app/build/reports/
+                    if-no-files-found: ignore
+                    retention-days: 14
+            -
+                name: Remove temporary signing key
+                if: always()
+                shell: bash
+                run: rm -f -- "$RUNNER_TEMP/joker-release.jks"

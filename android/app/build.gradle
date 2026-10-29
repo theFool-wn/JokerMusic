@@ -1,0 +1,69 @@
+import groovy.json.JsonSlurper
+
+plugins { id 'com.android.application' }
+
+def appVersion = new JsonSlurper().parse(rootProject.file('../static/version.json'))
+def signingFile = System.getenv('JOKER_KEYSTORE')
+
+android {
+    namespace 'net.wangnan.jokermusic'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'net.wangnan.jokermusic'
+        minSdk 23
+        targetSdk 36
+        versionCode appVersion.versionCode as int
+        versionName appVersion.version
+        buildConfigField 'String', 'SITE_ORIGIN', '"https://jokermusic.wangnan.net"'
+    }
+    buildFeatures { buildConfig true }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    signingConfigs {
+        debug { storeFile rootProject.file('.gradle/joker-debug.keystore') }
+        if (signingFile) {
+            release {
+                storeFile file(signingFile)
+                storePassword System.getenv('JOKER_STORE_PASSWORD')
+                keyAlias System.getenv('JOKER_KEY_ALIAS')
+                keyPassword System.getenv('JOKER_KEY_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (signingFile) signingConfig signingConfigs.release
+        }
+    }
+    lint { abortOnError true }
+}
+
+dependencies {
+    implementation 'androidx.activity:activity:1.10.1'
+    implementation 'androidx.webkit:webkit:1.14.0'
+    implementation 'androidx.media3:media3-exoplayer:1.8.0'
+    implementation 'androidx.media3:media3-session:1.8.0'
+    implementation 'androidx.media3:media3-datasource-okhttp:1.8.0'
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    testImplementation 'junit:junit:4.13.2'
+}
+
+// AGP only auto-creates a key at its default home-directory path. Generate our
+// project-local test key explicitly, so both a clean checkout and CI build work.
+def prepareDebugKeystore = tasks.register('prepareDebugKeystore', Exec) {
+    def key = rootProject.file('.gradle/joker-debug.keystore')
+    outputs.file(key)
+    onlyIf { !key.exists() }
+    doFirst { key.parentFile.mkdirs() }
+    def suffix = System.getProperty('os.name').toLowerCase().contains('windows') ? '.exe' : ''
+    executable new File(System.getProperty('java.home'), 'bin/keytool' + suffix)
+    args '-genkeypair', '-noprompt', '-storetype', 'JKS', '-keyalg', 'RSA', '-keysize', '2048',
+            '-validity', '10000', '-alias', 'androiddebugkey', '-storepass', 'android',
+            '-keypass', 'android', '-dname', 'CN=Android Debug,O=Android,C=US', '-keystore', key
+}
+tasks.configureEach {
+    if (name == 'validateSigningDebug') dependsOn(prepareDebugKeystore)
+}
