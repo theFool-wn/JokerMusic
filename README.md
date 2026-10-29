@@ -9,6 +9,7 @@
 ## UPDATE
 
 当前版本：**1.1.0**
+
 版本源 `static/version.json`, 使用 `python scripts/version.py --write`同步版本, `--check` 校验
 
 新增 WebView + Media3 Android 壳：网站提供界面、歌库和鉴权, 原生前台媒体服务负责后台播放及完整队列自动切歌

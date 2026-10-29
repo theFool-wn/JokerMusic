@@ -96,6 +96,13 @@ jobs:
                         echo 'enabled=true' >> "$GITHUB_OUTPUT"
                     fi
             -
+                name: Set up Android SDK command-line tools
+                uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
+                with:
+                    cmdline-tools-version: '12266719'
+                    packages: 'platform-tools'
+                    log-accepted-android-sdk-licenses: 'false'
+            -
                 name: Install Android SDK packages
                 shell: bash
                 run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
