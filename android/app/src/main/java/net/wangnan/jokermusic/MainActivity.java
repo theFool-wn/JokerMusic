@@ -2,6 +2,14 @@ package net.wangnan.jokermusic;
 
 import android.annotation.SuppressLint;
 import android.app.AlertDialog;
+import android.Manifest;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.content.pm.PackageManager;
+import android.provider.Settings;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.core.app.NotificationManagerCompat;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.graphics.Color;
@@ -53,6 +61,11 @@ public final class MainActivity extends ComponentActivity {
     private int documentGeneration;
     private boolean visible;
     private boolean oldPageWarning;
+    private boolean notificationNoticeShown;
+    private final ActivityResultLauncher<String> notificationPermission = registerForActivityResult(
+            new ActivityResultContracts.RequestPermission(), granted -> {
+                if (!granted) showNotificationSettings();
+            });
     private final Runnable ticker = new Runnable() {
         @Override public void run() {
             publishState();
@@ -174,6 +187,7 @@ public final class MainActivity extends ComponentActivity {
                 case "hello": break;
                 case "queue": setQueue(request); break;
                 case "play":
+                    ensurePlaybackNotifications();
                     if (controller.getPlaybackState() == Player.STATE_ENDED) controller.seekTo(0);
                     if (controller.getPlaybackState() == Player.STATE_IDLE) controller.prepare();
                     controller.play(); break;
@@ -226,7 +240,45 @@ public final class MainActivity extends ComponentActivity {
         controller.setMediaItems(items, index, position);
         applyMode(mode);
         controller.prepare();
-        controller.setPlayWhenReady(request.optBoolean("play", true));
+        boolean play = request.optBoolean("play", true);
+        if (play) ensurePlaybackNotifications();
+        controller.setPlayWhenReady(play);
+    }
+
+    private void ensurePlaybackNotifications() {
+        if (Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            // Ask once, in response to play; a denial never prevents audio playback.
+            if (!getPreferences(MODE_PRIVATE).getBoolean("notificationPermissionAsked", false)) {
+                getPreferences(MODE_PRIVATE).edit().putBoolean("notificationPermissionAsked", true).apply();
+                notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS);
+                return;
+            }
+            showNotificationSettings();
+            return;
+        }
+        boolean blocked = !NotificationManagerCompat.from(this).areNotificationsEnabled();
+        if (Build.VERSION.SDK_INT >= 26) {
+            NotificationChannel channel = getSystemService(NotificationManager.class)
+                    .getNotificationChannel(PlaybackService.NOTIFICATION_CHANNEL_ID);
+            blocked |= channel != null && channel.getImportance() == NotificationManager.IMPORTANCE_NONE;
+        }
+        if (blocked) showNotificationSettings();
+    }
+
+    private void showNotificationSettings() {
+        if (notificationNoticeShown || isFinishing() || isDestroyed()) return;
+        notificationNoticeShown = true;
+        new AlertDialog.Builder(this)
+                .setMessage("播放通知未开启，可能无法显示控制中心和锁屏播放按钮。可以在系统设置中开启通知及锁屏显示，音乐仍可继续播放。")
+                .setPositiveButton("打开设置", (dialog, which) -> {
+                    Intent intent = Build.VERSION.SDK_INT >= 26
+                            ? new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                    .putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName())
+                            : new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                    Uri.parse("package:" + getPackageName()));
+                    startActivity(intent);
+                }).setNegativeButton("暂不开启", null).show();
     }
 
     private void applyMode(String mode) {

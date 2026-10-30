@@ -1,6 +1,11 @@
 package net.wangnan.jokermusic;
 
 import android.app.PendingIntent;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.os.Build;
+import androidx.media3.session.DefaultMediaNotificationProvider;
 import android.content.Intent;
 import android.webkit.CookieManager;
 import androidx.annotation.Nullable;
@@ -19,11 +24,25 @@ import okhttp3.Request;
 
 @UnstableApi
 public final class PlaybackService extends MediaSessionService {
+    public static final String NOTIFICATION_CHANNEL_ID = DefaultMediaNotificationProvider.DEFAULT_CHANNEL_ID;
     private ExoPlayer player;
     private MediaSession session;
 
     @Override public void onCreate() {
         super.onCreate();
+        if (Build.VERSION.SDK_INT >= 26) {
+            NotificationChannel channel = new NotificationChannel(NOTIFICATION_CHANNEL_ID,
+                    getString(R.string.playback_channel_name), NotificationManager.IMPORTANCE_LOW);
+            channel.setDescription(getString(R.string.playback_channel_description));
+            channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+            channel.setShowBadge(false);
+            getSystemService(NotificationManager.class).createNotificationChannel(channel);
+        }
+        DefaultMediaNotificationProvider notifications = new DefaultMediaNotificationProvider.Builder(this)
+                .setChannelId(NOTIFICATION_CHANNEL_ID)
+                .setChannelName(R.string.playback_channel_name).build();
+        notifications.setSmallIcon(R.drawable.ic_stat_music);
+        setMediaNotificationProvider(notifications);
         // Initialize on the main thread; get fresh cookies for EVERY audio request.
         CookieManager cookies = CookieManager.getInstance();
         OkHttpClient client = new OkHttpClient.Builder()

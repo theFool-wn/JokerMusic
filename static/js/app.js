@@ -449,7 +449,13 @@
     }
 
     async function restoreNowPlaying() {
-        if (dom.audio.isNative && syncNativePlayback()) return;
+        if (dom.audio.isNative && syncNativePlayback()) {
+            const id = state.playingPlaylistId;
+            switchPlaylist(id === 'all' || state.playlists.some(p => p.id === id) ? id : 'all');
+            highlightCurrentSong();
+            scrollToCurrentSong();
+            return;
+        }
         try {
             const raw = localStorage.getItem(NOWPLAYING_KEY);
             if (!raw) return;
@@ -524,7 +530,12 @@
             if (dom.audio.isNative) {
                 await dom.audio.setQueue(queueSongs, state.currentIndex, state.playMode,
                     state.playingPlaylistId, savedTime, false);
+                updateSelectorCounts();
+                renderPlaylistDropdown();
                 applySortAndFilter();
+                highlightCurrentSong();
+                scrollToCurrentSong();
+                updatePlaybackProgress();
                 return;
             }
             // 歌词加载后，等下一帧布局稳定再刷新歌词（解决手机端隐藏容器布局未就绪的问题）
@@ -933,10 +944,15 @@
         dom.playerTitle.textContent = dom.flTitle.textContent = song.title || song.filename;
         dom.playerArtist.textContent = dom.flArtist.textContent = song.artist || '薛之谦';
         if (changed) {
-            loadLyric(song.filename);
+            loadLyric(song.filename).then(() => {
+                if (state.currentSong?.filename !== song.filename) return;
+                updatePlaybackProgress();
+                // Finish lyric layout/scrolling before starting the song-list animation.
+                scrollToCurrentSong();
+            });
             highlightCurrentSong();
         }
-        dom.totalTime.textContent = formatTime(dom.audio.duration);
+        updatePlaybackProgress();
         dom.volumeFill.style.width = (dom.audio.volume * 100) + '%';
         updatePlayIcon(snapshot.playing);
         saveNowPlaying();
@@ -995,17 +1011,24 @@
     // ============================================================
     // requestAnimationFrame 高频更新
     // ============================================================
+    // State snapshots also arrive while paused (restore, seek, metadata, reconnect).
+    function updatePlaybackProgress() {
+        if (state.isSeeking) return;
+        const current = Math.max(0, dom.audio.currentTime || 0);
+        const duration = dom.audio.duration || (dom.audio.isNative ? Number(state.currentSong?.duration) : 0) || 0;
+        const percent = duration > 0 ? Math.min(100, current / duration * 100) : 0;
+        dom.progressFill.style.width = percent + '%';
+        dom.currentTime.textContent = formatTime(current);
+        dom.totalTime.textContent = formatTime(duration);
+        updateLyric(current);
+    }
+
     function startRafLoop() {
         if (state.rafId) return;
 
         function loop() {
             if (!dom.audio.paused && !dom.audio.ended && !state.isSeeking) {
-                const current = dom.audio.currentTime;
-                const duration = dom.audio.duration || 0;
-                const percent = duration > 0 ? (current / duration) * 100 : 0;
-                dom.progressFill.style.width = percent + "%";
-                dom.currentTime.textContent = formatTime(current);
-                updateLyric(current);
+                updatePlaybackProgress();
             }
             state.rafId = requestAnimationFrame(loop);
         }
@@ -1420,6 +1443,7 @@
         dom.audio.addEventListener('playbackfailure', event => showToast(event.detail));
         let lastSavedAt = 0;
         dom.audio.addEventListener('timeupdate', () => {
+            updatePlaybackProgress();
             if (Date.now() - lastSavedAt > 5000) {
                 saveNowPlaying();
                 lastSavedAt = Date.now();
@@ -1453,7 +1477,7 @@
         });
         dom.audio.addEventListener("ended", () => playNext(true));
         dom.audio.addEventListener("loadedmetadata", () => {
-            dom.totalTime.textContent = formatTime(dom.audio.duration);
+            updatePlaybackProgress();
             // metadata 加载完成后再设置一次位置状态（此时 duration 一定有效）
             if (!dom.audio.isNative && 'mediaSession' in navigator && navigator.mediaSession.metadata) {
                 try {

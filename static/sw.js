@@ -1,5 +1,5 @@
 // Static assets only
-const VERSION = '1.1.0';
+const VERSION = '1.1.1';
 const CACHE_PREFIX = 'JokerMusic-static-';
 const CACHE_NAME = CACHE_PREFIX + VERSION;
 const STATIC_CACHE = [

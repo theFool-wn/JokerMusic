@@ -8,7 +8,7 @@
 
 ## UPDATE
 
-当前版本：**1.1.0**
+当前版本：**1.1.1**
 
 版本源 `static/version.json`, 使用 `python scripts/version.py --write`同步版本, `--check` 校验
 
