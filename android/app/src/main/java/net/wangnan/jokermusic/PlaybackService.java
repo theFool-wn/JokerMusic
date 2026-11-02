@@ -12,6 +12,8 @@ import androidx.annotation.Nullable;
 import androidx.media3.common.AudioAttributes;
 import androidx.media3.common.C;
 import androidx.media3.common.util.UnstableApi;
+import androidx.media3.common.ForwardingPlayer;
+import androidx.media3.common.Player;
 import androidx.media3.datasource.okhttp.OkHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
@@ -68,7 +70,31 @@ public final class PlaybackService extends MediaSessionService {
         player.setVolume(0.7f);
         PendingIntent openApp = PendingIntent.getActivity(this, 0,
                 new Intent(this, MainActivity.class), PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        session = new MediaSession.Builder(this, player).setSessionActivity(openApp).build();
+        ForwardingPlayer sessionPlayer = new ForwardingPlayer(player) {
+			private void nextAndPlay() {
+				if (player.getMediaItemCount() == 0) return;
+				int nextIndex = player.getNextMediaItemIndex();
+				if (nextIndex == C.INDEX_UNSET) {
+					nextIndex = 0;
+				}
+				player.seekToDefaultPosition(nextIndex);
+				if (player.getPlaybackState() == Player.STATE_IDLE) {
+					player.prepare();
+				}
+				player.play();
+			}
+			@Override
+			public void seekToNext() {
+				nextAndPlay();
+			}
+			@Override
+			public void seekToNextMediaItem() {
+				nextAndPlay();
+			}
+		};
+		session = new MediaSession.Builder(this, sessionPlayer)
+			.setSessionActivity(openApp)
+			.build();
         // The complete queue and foreground playback outlive the WebView/Activity.
         addSession(session);
     }
