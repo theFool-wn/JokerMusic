@@ -1,6 +1,6 @@
 # Joker's Music · 薛之谦私人音乐播放器
 
-[![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-blue.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)  ![Made by Wang Nan](https://img.shields.io/badge/Made%20by-Wang%20Nan-brightgreen)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0.html)  ![Made by Wang Nan](https://img.shields.io/badge/Made%20by-Wang%20Nan-brightgreen)  ![Python](https://img.shields.io/badge/Python-3.x-blue)
 
 基于 Flask + 原生 HTML/CSS/JS 的私人音乐播放器，音频文件存放在本地电脑，通过 cloudflared 内网穿透实现外网访问。
 
@@ -103,12 +103,14 @@ waitress-serve --host=0.0.0.0 --port=8080 JokerMusic:app
 
 ## License
 
-This work is licensed under the **[CC BY-NC-SA 4.0 License](https://creativecommons.org/licenses/by-nc-sa/4.0/)**.
+This project is licensed under the **[GNU Affero General Public License v3.0 (AGPL-3.0)](https://www.gnu.org/licenses/agpl-3.0.html)**.
 
-You are free to use, share, and adapt the code for **non-commercial purposes**, provided that:
+You are free to **use, modify, and distribute** this project, including for commercial purposes, provided that:
 
-* You must give **appropriate credit**, provide **a link to this License**, and indicate if modifications were made. You may give credit in any reasonable way, but you must not do so in any way that suggests that the licensor endorses you or your use.
-* You **distribute any modifications under the same license**.
+* You **retain the copyright and license notices**.
+* You **distribute modified versions under the same license**.
+* You **make the corresponding source code available** as required by the AGPL-3.0, including when modified software is used to provide a network service.
 
+See the [LICENSE](/LICENSE) file for details.
 
-© 2026 Wang Nan. All rights reserved.
+Copyright (c) 2026 Wang Nan

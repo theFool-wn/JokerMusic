@@ -188,4 +188,4 @@ You are free to **use, modify, and distribute** this project, including for comm
 
 See the [LICENSE](/LICENSE) file for details.
 
-Copyright (c) 2025-2026 Wang Nan
+Copyright (c) 2026 Wang Nan
