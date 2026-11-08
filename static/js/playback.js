@@ -191,7 +191,13 @@
             const before = this.nativeState;
             this.nativeState = message;
             this.resolveReady();
+            this._muted = message.volume === 0;
             if (!this._muted) this._volume = message.volume;
+            else if (message.lastAudibleVolume > 0) this._volume = message.lastAudibleVolume;
+            if (before.mode !== message.mode || before.volume !== message.volume ||
+                    before.hasSavedMode !== message.hasSavedMode || before.hasSavedVolume !== message.hasSavedVolume) {
+                this.dispatchEvent(new Event('nativesettings'));
+            }
             if (before.queue?.[before.index]?.filename !== message.queue?.[message.index]?.filename || before.playlistId !== message.playlistId) {
                 this.dispatchEvent(new Event('nativechange'));
             }
@@ -262,15 +268,15 @@
             return this._volume;
         }
         set volume(volume) {
-            this._volume = volume;
-            this.fire('volume', {
-                volume: this._muted ? 0 : volume
-            });
+            this._muted = volume === 0;
+            if (volume > 0) this._volume = volume;
+            this.fire('volume', {volume});
         }
         get muted() {
             return this._muted;
         }
         set muted(muted) {
+            if (muted === this._muted) return;
             this._muted = muted;
             this.fire('volume', {
                 volume: muted ? 0 : this._volume

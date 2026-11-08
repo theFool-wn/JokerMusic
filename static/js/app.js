@@ -928,6 +928,29 @@
         state.preloadAudio.load();
     }
 
+    function syncNativeSettings() {
+        const snapshot = dom.audio.nativeState;
+        if (snapshot.mode && (snapshot.queue.length || snapshot.hasSavedMode)) {
+            state.playMode = snapshot.mode;
+            localStorage.setItem(MODE_KEY, snapshot.mode);
+            dom.modeBtns.forEach(btn => btn.classList.toggle('active', btn.dataset.mode === snapshot.mode));
+        }
+        const volume = dom.audio.muted ? 0 : dom.audio.volume;
+        dom.volumeFill.style.width = volume * 100 + '%';
+        if (dom.volumePopupFill) dom.volumePopupFill.style.height = volume * 100 + '%';
+        if (snapshot.queue.length || snapshot.hasSavedVolume) {
+            localStorage.setItem(VOLUME_KEY, String(volume));
+        }
+        const icon = dom.muteBtn.querySelector('path');
+        if (icon) {
+            if (!icon.dataset.audible) icon.dataset.audible = icon.getAttribute('d');
+            icon.setAttribute('d', dom.audio.muted
+                ? 'M3 9v6h4l5 5V4L7 9H3zm12 0 1.4-1.4 2.1 2.1 2.1-2.1L22 9l-2.1 2.1L22 13.2l-1.4 1.4-2.1-2.1-2.1 2.1-1.4-1.4 2.1-2.1z'
+                : icon.dataset.audible);
+        }
+        dom.muteBtn.setAttribute('aria-label', dom.audio.muted ? '音量（已静音）' : '音量');
+    }
+
     function syncNativePlayback() {
         const snapshot = dom.audio.nativeState;
         if (!snapshot || snapshot.index < 0 || !snapshot.queue[snapshot.index]) return false;
@@ -938,8 +961,7 @@
         state.currentSong = song;
         state.playingPlaylistId = snapshot.playlistId || 'all';
         state.playingPlaylistName = getPlaylistName(state.playingPlaylistId);
-        state.playMode = snapshot.mode || state.playMode;
-        dom.modeBtns.forEach(btn => btn.classList.toggle('active', btn.dataset.mode === state.playMode));
+        syncNativeSettings();
         updatePlayerPlaylistTag();
         dom.playerTitle.textContent = dom.flTitle.textContent = song.title || song.filename;
         dom.playerArtist.textContent = dom.flArtist.textContent = song.artist || '薛之谦';
@@ -953,7 +975,6 @@
             highlightCurrentSong();
         }
         updatePlaybackProgress();
-        dom.volumeFill.style.width = (dom.audio.volume * 100) + '%';
         updatePlayIcon(snapshot.playing);
         saveNowPlaying();
         return true;
@@ -1436,6 +1457,7 @@
         });
 
         // Audio 事件；原生端自己切歌，网页只同步状态。
+        dom.audio.addEventListener('nativesettings', syncNativeSettings);
         dom.audio.addEventListener('nativechange', () => {
             if (state.songs.length) syncNativePlayback();
         });
@@ -1561,7 +1583,7 @@
             e.stopPropagation();
             if (window.innerWidth <= 640) {
                 const isOpen = dom.volumePopup.classList.toggle("show");
-                dom.volumePopupFill.style.height = (dom.audio.volume * 100) + "%";
+                dom.volumePopupFill.style.height = (dom.audio.muted ? 0 : dom.audio.volume * 100) + "%";
                 document.querySelector(".player-bar").style.zIndex = isOpen ? "9999" : "";
             } else {
                 dom.audio.muted = !dom.audio.muted;
@@ -1950,11 +1972,11 @@
                 showToast(error.message);
                 return;
             }
-            if (!dom.audio.nativeState.queue.length) {
+            if (!dom.audio.nativeState.queue.length && !dom.audio.nativeState.hasSavedVolume) {
                 const v = parseFloat(savedVolume);
                 dom.audio.volume = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0.7;
             }
-            dom.volumeFill.style.width = dom.audio.volume * 100 + "%";
+            syncNativeSettings();
         } else dom.audio.loop = state.playMode === 'repeat';
         await restoreNowPlaying();
 

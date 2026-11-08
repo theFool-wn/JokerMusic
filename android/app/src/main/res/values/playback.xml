@@ -2,4 +2,9 @@
 <resources>
     <string name="playback_channel_name">音乐播放</string>
     <string name="playback_channel_description">歌曲信息、播放控制和锁屏媒体通知</string>
+    <string name="mode_sequence">顺序播放，切换到随机播放</string>
+    <string name="mode_shuffle">随机播放，切换到单曲循环</string>
+    <string name="mode_repeat">单曲循环，切换到顺序播放</string>
+    <string name="action_mute">静音</string>
+    <string name="action_unmute">取消静音</string>
 </resources>

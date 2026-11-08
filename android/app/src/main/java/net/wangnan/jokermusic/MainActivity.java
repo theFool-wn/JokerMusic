@@ -282,9 +282,7 @@ public final class MainActivity extends ComponentActivity {
     }
 
     private void applyMode(String mode) {
-        controller.setShuffleModeEnabled("shuffle".equals(mode));
-        controller.setRepeatMode("repeat".equals(mode) ? Player.REPEAT_MODE_ONE
-                : "shuffle".equals(mode) ? Player.REPEAT_MODE_ALL : Player.REPEAT_MODE_OFF);
+        PlaybackService.applyMode(controller, mode);
     }
 
     private void skip(boolean previous) {
@@ -320,12 +318,15 @@ public final class MainActivity extends ComponentActivity {
             boolean playing = controller.getPlayWhenReady() && playbackState != Player.STATE_ENDED
                     && playbackState != Player.STATE_IDLE
                     && controller.getPlaybackSuppressionReason() == Player.PLAYBACK_SUPPRESSION_REASON_NONE;
-            String mode = controller.getRepeatMode() == Player.REPEAT_MODE_ONE ? "repeat"
-                    : controller.getShuffleModeEnabled() ? "shuffle" : "sequence";
+            String mode = PlaybackService.playbackMode(controller);
+            android.content.SharedPreferences settings = getSharedPreferences(PlaybackService.SETTINGS, MODE_PRIVATE);
             sendToPage(reply, new JSONObject().put("type", "state").put("protocol", 1)
                     .put("appVersion", BuildConfig.VERSION_NAME).put("queue", queue)
                     .put("index", queue.length() == 0 ? -1 : controller.getCurrentMediaItemIndex())
                     .put("playlistId", playlist).put("mode", mode).put("playing", playing)
+                    .put("hasSavedMode", settings.contains("mode"))
+                    .put("hasSavedVolume", settings.contains("volume"))
+                    .put("lastAudibleVolume", settings.getFloat("lastAudibleVolume", 0.7f))
                     .put("ended", playbackState == Player.STATE_ENDED)
                     .put("position", Math.max(0, controller.getCurrentPosition()) / 1000.0)
                     .put("duration", Math.max(0, controller.getDuration()) / 1000.0)
