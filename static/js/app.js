@@ -505,15 +505,17 @@
             if (!song) return;
 
             // 从播放来源歌单构建队列
-            let queueSongs = getPlaylistSongs(data.playingPlaylistId);
+            let queuePlaylistId = targetPlaylistId;
+            let queueSongs = getSortedPlaylistSongs(queuePlaylistId);
             let idx = queueSongs.findIndex((s) => s.filename === data.filename);
             if (idx < 0) {
-                queueSongs = state.songs.slice();
+                queuePlaylistId = 'all';
+                queueSongs = getSortedPlaylistSongs(queuePlaylistId);
                 idx = queueSongs.findIndex(s => s.filename === data.filename);
-                state.playingPlaylistId = 'all';
-                state.playingPlaylistName = getPlaylistName('all');
-                updatePlayerPlaylistTag();
             }
+            state.playingPlaylistId = queuePlaylistId;
+            state.playingPlaylistName = getPlaylistName(queuePlaylistId);
+            updatePlayerPlaylistTag();
             state.currentSong = song;
             state.playQueue = queueSongs;
             state.currentIndex = idx >= 0 ? idx : 0;
@@ -683,20 +685,8 @@
     // ============================================================
     // 排序 + 搜索过滤
     // ============================================================
-    function applySortAndFilter() {
-        const kw = (dom.searchInput.value || "").trim().toLowerCase();
-        let list = [...getPlaylistSongs(state.currentPlaylistId)];
-
-        // 搜索
-        if (kw) {
-            list = list.filter((s) =>
-                (s.title || "").toLowerCase().includes(kw) ||
-                (s.artist || "").toLowerCase().includes(kw) ||
-                (s.album || "").toLowerCase().includes(kw) ||
-                (s.filename || "").toLowerCase().includes(kw)
-            );
-        }
-
+    function getSortedPlaylistSongs(id) {
+        const list = [...getPlaylistSongs(id)];
         // 排序（自定义排序不做额外排序，保持歌单原始顺序）
         const {
             field,
@@ -711,6 +701,21 @@
             } else if (field === "duration") {
                 list.sort((a, b) => dir * ((a.duration || 0) - (b.duration || 0)));
             }
+        }
+        return list;
+    }
+
+    function applySortAndFilter() {
+        const kw = (dom.searchInput.value || "").trim().toLowerCase();
+        let list = getSortedPlaylistSongs(state.currentPlaylistId);
+        // 搜索
+        if (kw) {
+            list = list.filter((s) =>
+                (s.title || "").toLowerCase().includes(kw) ||
+                (s.artist || "").toLowerCase().includes(kw) ||
+                (s.album || "").toLowerCase().includes(kw) ||
+                (s.filename || "").toLowerCase().includes(kw)
+            );
         }
 
         state.filteredSongs = list;
@@ -879,10 +884,16 @@
         });
     }
 
+    function playListedSong(song) {
+        const queue = getSortedPlaylistSongs(state.currentPlaylistId);
+        const index = queue.findIndex(item => item.filename === song.filename);
+        if (index >= 0) playSong(song, queue, index, state.currentPlaylistId);
+    }
+
     function togglePlay() {
         if (!state.currentSong) {
             if (state.playQueue.length > 0) playSong(state.playQueue[0], state.playQueue, 0, state.playingPlaylistId);
-            else if (state.filteredSongs.length > 0) playSong(state.filteredSongs[0], state.filteredSongs, 0, state.currentPlaylistId);
+            else if (state.filteredSongs.length > 0) playListedSong(state.filteredSongs[0]);
             return;
         }
         if (dom.audio.paused) dom.audio.play().catch(() => {});
@@ -1672,9 +1683,7 @@
                         openFullscreenLyric();
                         return;
                     }
-                    const queue = [...getPlaylistSongs(state.currentPlaylistId)];
-                    const idx = queue.findIndex((s) => s.filename === filename);
-                    playSong(song, queue, idx >= 0 ? idx : 0, state.currentPlaylistId);
+                    playListedSong(song);
                 }
             }
         });
