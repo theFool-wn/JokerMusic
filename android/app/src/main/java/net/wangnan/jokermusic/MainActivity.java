@@ -24,6 +24,7 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.WebChromeClient;
 import android.widget.FrameLayout;
 import android.widget.Toast;
 
@@ -97,6 +98,7 @@ public final class MainActivity extends ComponentActivity {
             return;
         }
         webView = new WebView(this);
+        webView.setWebChromeClient(new WebChromeClient());
         root.addView(webView, new FrameLayout.LayoutParams(-1, -1));
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
